@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rei da Estrada V5</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #333;
+      font-family: "Inter", sans-serif;
+      cursor: grab;
+    }
+
+    body:active {
+      cursor: grabbing;
+    }
+
+    #game-info-panel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      max-width: 300px;
+      z-index: 10;
+      display: none;
+    }
+
+    #close-info-button {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 24px;
+      height: 24px;
+      background-color: rgba(231, 76, 60, 0.9);
+      color: #e0e0e0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      transition:
+        background-color 0.2s,
+        color 0.2s;
+    }
+
+    #close-info-button:hover {
+      background-color: rgba(248, 25, 0, 0.9);
+      color: #fff;
+    }
+
+    #message-box {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(26, 188, 156, 0.9);
+      color: white;
+      padding: 30px;
+      border-radius: 15px;
+      font-size: 2rem;
+      font-weight: bold;
+      display: none;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      max-width: 90%;
+      width: 500px;
+    }
+
+    #message-box.fail {
+      background-color: rgba(231, 76, 60, 0.9);
+    }
+
+    #action-button {
+      cursor: pointer;
+      font-size: 1.1rem;
+      margin-top: 10px;
+      background-color: #4a5d45;
+      padding: 8px 16px;
+      border-radius: 5px;
+    }
+
+    #parking-brake-indicator {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(200, 0, 0, 0.85);
+      color: white;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-weight: bold;
+      font-size: 1.1rem;
+      display: none;
+      /* Escondido por defeito */
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      text-shadow: 0 0 5px black;
+    }
+
+    #speedometer {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 1.8rem;
+      font-weight: bold;
+      font-family: "Courier New", Courier, monospace;
+      text-shadow: 2px 2px 4px black;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      min-width: 150px;
+      text-align: center;
+    }
+
+    #alert-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: none;
+      /* Inicia escondido */
+      justify-content: center;
+      align-items: center;
+      z-index: 200;
+    }
+
+    #alert-panel {
+      background-color: #f39c12;
+      color: white;
+      padding: 25px;
+      border-radius: 15px;
+      text-align: center;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+      max-width: 90%;
+      width: 400px;
+    }
+
+    #alert-text {
+      font-size: 1.2rem;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+
+    #alert-close-button {
+      background-color: #c0392b;
+      color: white;
+      padding: 10px 30px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    }
+
+    #alert-close-button:hover {
+      background-color: #e74c3c;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+  <div id="game-container">
+    <div id="game-info-panel">
+      <span id="close-info-button" title="Close">X</span>
+      <h1 class="text-xl font-bold mb-1">King of the Road</h1>
+      <h2 id="info-title" class="text-x2 font-bold mb-1">Level title goes here</h2>
+      <p id="info-description" class="text-sm">Level description goes here</p>
+      <hr class="border-gray-600 my-2" />
+      <div class="text-left text-sm mt-2">
+        <p><span class="font-bold">Arrows:</span> Move the ruck</p>
+        <p><span class="font-bold">Space:</span> Park brake</p>
+        <p><span class="font-bold">T:</span> Hitch trailer</p>
+        <p><span class="font-bold">Mouse:</span> Move Cam </p>
+        <p><span class="font-bold">Scroll:</span> Zoom</p>
+        <p><span class="font-bold">0:</span> Free cam</p>
+        <p><span class="font-bold">2:</span> Hood cam</p>
+        <p><span class="font-bold">3:</span> Rear cam</p>
+        <p><span class="font-bold">4:</span> Left wheel cam</p>
+        <p><span class="font-bold">5:</span> Right wheel cam</p>
+      </div>
+    </div>
+
+    <div id="message-box">
+      <p id="message-text"></p>
+      <button id="action-button" class="mt-4 text-lg font-normal"></button>
+    </div>
+
+    <div id="Truck dashboard">
+      <div id="alert-overlay">
+        <div id="alert-panel">
+          <p id="alert-text"></p>
+          <button id="alert-close-button">Close (Enter)</button>
+        </div>
+      </div>
+
+      <div id="parking-brake-indicator">(P)</div>
+    </div>
+
+    <div id="speedometer">0 km/h</div>
+  </div>
+  <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.18.0/dist/cannon-es.js",
+                "cannon-es-debugger": "./cannon-es-debugger.js"
+            }
+        }
+  </script>
+
+  <!----------------------------------------------------------------------------------------------
+   -- GLOBAL VARIABLES --
+   ----------------------------------------------------------------------------------------------->
+  <script type="module">
+    import * as THREE from 'three';
+    import { Scenario } from './scenario.js';
+    import { CameraManager } from './camera_manager.js';
+    import { KeyboardController } from './keyboard_controller.js';
+    import { LevelManager } from './level_manager.js';
+    import { KenworthW900 } from './kenworth_w900.js';
+    import { TrunkTrailer } from './trunk_trailer.js';
+    import CannonDebugger from 'cannon-es-debugger'
+
+    class Log {
+      constructor(pace) {
+        this.pace = pace;
+        this.counter = 0;
+      }
+
+      Update() {
+        this.counter += this.pace;
+      }
+
+      LOG(msg) {
+        if (this.counter % 50 === 0)
+          console.log(this.counter, msg);
+      }
+    }
+
+    const logger = new Log(1);
+    const clock = new THREE.Clock();
+    const scenario = new Scenario();
+    const w900 = new KenworthW900();
+    const trunk_trailer = new TrunkTrailer();
+    const keyboardController = new KeyboardController();
+    let camera, world;
+    let level_manager;
+    let cannonDebugger;
+
+    /***
+     * GET RID OF These
+     */
+    let vehicle;
+
+    function initCannonDebugger() {
+      cannonDebugger = new CannonDebugger(scenario.scene, world, {
+        onInit(body, mesh) {
+          mesh.visible = false;
+          document.addEventListener('keydown', (event) => {
+            if (event.key.toLowerCase() === 'd') {
+              mesh.visible = !mesh.visible;
+            }
+          })
+        },
+      })
+    }
+
+    /**
+     * Função principal que inicializa e orquestra a criação do jogo.
+     */
+    function init() {
+      setupSceneAndPhysics();
+
+      scenario.Initialize(world);
+      w900.Initialize({
+        world: world,
+        scene: scenario.scene,
+        alertOverlay: document.getElementById('alert-overlay'),
+        alertText: document.getElementById('alert-text'),
+        brakeIndicator: document.getElementById("parking-brake-indicator")
+      });
+      vehicle = w900.vehicle;
+
+      trunk_trailer.Initialize({
+        world: world,
+        scene: scenario.scene
+      });
+
+      setupControls();
+
+      const uiElements = {
+        infoPanel: document.getElementById('game-info-panel'),
+        infoTitle: document.getElementById('info-title'),
+        infoDescription: document.getElementById('info-description'),
+        msgBox: document.getElementById('message-box'),
+        msgText: document.getElementById('message-text'),
+        actionButton: document.getElementById('action-button')
+      };
+
+      level_manager = new LevelManager(uiElements, camera, w900, trunk_trailer, keyboardController, scenario);
+      level_manager.setupLevel();
+
+      scenario.SetUpCollisions(w900.vehicle, level_manager);
+
+      initCannonDebugger();
+
+      animate();
+    }
+
+
+    /**
+     * Configura a cena 3D (Three.js) e o mundo da física (Cannon.js).
+     */
+    function setupSceneAndPhysics() {
+      // Câmera
+      camera = new CameraManager();
+      camera.Initialize(window.innerWidth, window.innerHeight);
+      camera.AddHoodCamera(window.innerWidth, window.innerHeight);
+      camera.AddRearCamera(window.innerWidth, window.innerHeight);
+      camera.AddLeftCamera(window.innerWidth, window.innerHeight);
+      camera.AddRightCamera(window.innerWidth, window.innerHeight);
+
+      // Física
+      world = new CANNON.World();
+      world.gravity.set(0, -9.82, 0);
+      world.broadphase = new CANNON.SAPBroadphase(world);
+      world.solver.iterations = 10;
+    }
+
+
+    /**
+     * Configura todos os listeners de eventos para controle.
+     */
+    function setupControls() {
+      document.addEventListener("keydown", (e) => {
+        keyboardController.HandleKeyDown(e);
+        if (e.key.toLowerCase() === "0") {
+          camera.SwitchTo("orbital");
+        }
+        if (e.key === "2") {
+          camera.SwitchTo("hood");
+        }
+        if (e.key === "3") {
+          camera.SwitchTo("rear");
+        }
+        if (e.key === "4") {
+          camera.SwitchTo("left");
+        }
+        if (e.key === "5") {
+          camera.SwitchTo("right");
+        }
+        if (e.key.toLowerCase() === "t") {
+          EngageTruckTrailer();
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          document.getElementById('alert-overlay').style.display = 'none';
+        }
+
+      });
+      document.addEventListener("keyup", (e) => {
+        keyboardController.HandleKeyUp(e);
+      });
+      document.addEventListener("mousedown", (e) => {
+        camera.MouseDown(e);
+      });
+      document.addEventListener("mouseup", (e) => {
+        camera.MouseUp(e);
+      });
+      document.addEventListener("mousemove", (e) => {
+        camera.MouseMove(e);
+      });
+      document.addEventListener("wheel", (e) => {
+        camera.MouseWheel(e);
+      });
+      document.getElementById("close-info-button").addEventListener("click", () => {
+        document.getElementById("game-info-panel").style.display = "none";
+      });
+
+      document.getElementById('alert-close-button').addEventListener('click', () => {
+        document.getElementById('alert-overlay').style.display = 'none';
+      });
+    }
+
+
+    /**
+     * Lida com a movimentação do veículo baseada nas teclas pressionadas.
+     */
+    function handleVehicleControls() {
+      w900.setSteering(keyboardController.getSteering());
+
+      const maxBrakeForce = 4000;
+
+      // Clear all forces.
+      for (let i = 0; i < 6; i++) {
+        vehicle.applyEngineForce(0, i);
+        vehicle.setBrake(0, i);
+      }
+
+      w900.setParkingBrake(keyboardController.parkingBrakeOn);
+
+      const isMoving = w900.isMoving();
+      let brake = keyboardController.getBrake(isMoving) * maxBrakeForce;
+
+      if (brake > 0) {
+        if (!isMoving) {
+          vehicle.setBrake(brake, 0);
+          vehicle.setBrake(brake, 1);
+          vehicle.setBrake(brake, 4);
+          vehicle.setBrake(brake, 5);
+        } else {
+          brake = brake * isMoving;
+          for (let i = 0; i < 6; i++) {
+            // All wheels break
+            vehicle.applyEngineForce(brake, i);
+          }
+        }
+      }
+      w900.Throttle(keyboardController.getThrottle(isMoving));
+      w900.previousDirection = isMoving;
+    }
+
+    function EngageTruckTrailer() {
+      w900.EngageTrailer(trunk_trailer);
+    }
+
+
+    /**
+     * Atualiza o velocímetro na interface.
+     */
+    function updateSpeedometer() {
+      const speed = vehicle.chassisBody.velocity.length(); // Velocidade em m/s
+      const speedKmh = Math.floor(speed * 3.6);
+      const speedometerElement = document.getElementById("speedometer");
+      if (speedometerElement) {
+        speedometerElement.innerText = `${speedKmh} km/h`;
+      }
+    }
+
+
+    /**
+     * O loop principal de animação e lógica do jogo.
+     */
+    function animate() {
+      if (!level_manager.Ended()) {
+        handleVehicleControls();
+        level_manager.checkSuccess();
+      }
+
+      requestAnimationFrame(animate);
+
+      const deltaTime = clock.getDelta();
+      world.step(1 / 60, deltaTime);
+
+      cannonDebugger.update();
+
+      w900.UpdatePosition();
+      trunk_trailer.UpdatePosition();
+      camera.UpdatePosition(w900.getChassisMesh());
+      updateSpeedometer();
+
+      scenario.Update(camera.Get());
+      logger.Update();
+    }
+
+
+    // --- INICIAR JOGO ---
+    window.addEventListener("resize", () => {
+      camera.Resize(window.innerWidth, window.innerHeight);
+      scenario.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    window.onload = init;
+  </script>
+</body>
+
+</html>

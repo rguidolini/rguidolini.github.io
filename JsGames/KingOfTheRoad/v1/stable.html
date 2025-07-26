@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="pt-br">
+ <head>
+   <meta charset="UTF-8" />
+   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+   <title>Rei da Estrada: Teste de Baliza</title>
+   <script src="https://cdn.tailwindcss.com"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+   <style>
+     body {
+       margin: 0;
+       overflow: hidden;
+       background-color: #333;
+       font-family: "Inter", sans-serif;
+       cursor: grab;
+     }
+     body:active {
+       cursor: grabbing;
+     }
+     #game-info-panel {
+       position: absolute;
+       top: 20px;
+       left: 20px;
+       background-color: rgba(0, 0, 0, 0.75);
+       color: white;
+       padding: 15px 20px;
+       border-radius: 12px;
+       border: 1px solid rgba(255, 255, 255, 0.2);
+       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+       max-width: 300px;
+       z-index: 10;
+     }
+     #close-info-button {
+       position: absolute;
+       top: 5px;
+       right: 5px;
+       width: 24px;
+       height: 24px;
+       background-color: rgba(231, 76, 60, 0.9);
+       color: #e0e0e0;
+       border-radius: 50%;
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       font-weight: bold;
+       font-family: Arial, sans-serif;
+       font-size: 1rem;
+       line-height: 1;
+       cursor: pointer;
+       transition:
+         background-color 0.2s,
+         color 0.2s;
+     }
+     #close-info-button:hover {
+       background-color: rgba(248, 25, 0, 0.9);
+       color: #fff;
+     }
+     #message-box {
+       position: absolute;
+       top: 50%;
+       left: 50%;
+       transform: translate(-50%, -50%);
+       background-color: rgba(26, 188, 156, 0.9);
+       color: white;
+       padding: 30px;
+       border-radius: 15px;
+       font-size: 2rem;
+       font-weight: bold;
+       display: none;
+       text-align: center;
+       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+       max-width: 90%;
+       width: 500px;
+     }
+     #message-box.fail {
+       background-color: rgba(231, 76, 60, 0.9);
+     }
+     #restart-button {
+       cursor: pointer;
+       font-size: 1.1rem;
+       margin-top: 10px;
+       background-color: #4a5d45;
+       padding: 8px 16px;
+       border-radius: 5px;
+     }
+     #parking-brake-indicator {
+       position: absolute;
+       bottom: 20px;
+       left: 50%;
+       transform: translateX(-50%);
+       background-color: rgba(200, 0, 0, 0.85);
+       color: white;
+       padding: 8px 20px;
+       border-radius: 10px;
+       font-weight: bold;
+       font-size: 1.1rem;
+       display: none; /* Escondido por defeito */
+       border: 1px solid rgba(255, 255, 255, 0.4);
+       text-shadow: 0 0 5px black;
+     }
+     #gemini-feedback-button {
+       background-color: #3498db;
+       color: white;
+       padding: 10px 20px;
+       border: none;
+       border-radius: 8px;
+       font-size: 1rem;
+       font-weight: bold;
+       margin-top: 20px;
+       cursor: pointer;
+       transition: background-color 0.3s;
+     }
+     #gemini-feedback-button:hover {
+       background-color: #2980b9;
+     }
+     #gemini-feedback-button:disabled {
+       background-color: #95a5a6;
+       cursor: not-allowed;
+     }
+     #feedback-display {
+       font-size: 1rem;
+       font-weight: normal;
+       margin-top: 15px;
+       padding: 10px;
+       background-color: rgba(0, 0, 0, 0.2);
+       border-radius: 8px;
+       min-height: 50px;
+       text-align: left;
+     }
+     #speedometer {
+       position: absolute;
+       bottom: 20px;
+       right: 20px;
+       background-color: rgba(0, 0, 0, 0.75);
+       color: white;
+       padding: 12px 20px;
+       border-radius: 12px;
+       font-size: 1.8rem;
+       font-weight: bold;
+       font-family: "Courier New", Courier, monospace;
+       text-shadow: 2px 2px 4px black;
+       border: 1px solid rgba(255, 255, 255, 0.2);
+       min-width: 150px;
+       text-align: center;
+     }
+   </style>
+   <link rel="preconnect" href="https://fonts.googleapis.com" />
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+   <link
+     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+     rel="stylesheet"
+   />
+ </head>
+ <body>
+   <div id="game-container">
+     <div id="game-info-panel">
+       <span id="close-info-button" title="Fechar">X</span>
+       <h1 class="text-xl font-bold mb-1">REI DA ESTRADA</h1>
+       <p class="text-sm mb-2">Teste de Baliza: Estacione o caminhão na área amarela.</p>
+       <hr class="border-gray-600 my-2" />
+       <div class="text-left text-sm mt-2">
+         <p><span class="font-bold">Setas:</span> Dirigir</p>
+         <p><span class="font-bold">Mouse:</span> Girar câmera</p>
+         <p><span class="font-bold">Scroll:</span> Zoom</p>
+         <p><span class="font-bold">0:</span> Câmera Orbital</p>
+         <p><span class="font-bold">2:</span> Câmera do Capô</p>
+         <p><span class="font-bold">3:</span> Câmera de Ré</p>
+         <p><span class="font-bold">4:</span> Câmera de Frontal Esquerda</p>
+         <p><span class="font-bold">5:</span> Câmera de Frontal Direita</p>
+         <p><span class="font-bold">Espaço:</span> Freio de Mão</p>
+       </div>
+     </div>
+
+
+     <div id="message-box">
+       <p id="message-text"></p>
+       <button id="restart-button" class="mt-4 text-lg font-normal">Tentar Novamente</button>
+     </div>
+
+
+     <div id="parking-brake-indicator">(P)</div>
+
+
+     <div id="speedometer">0 km/h</div>
+   </div>
+
+
+   <!----------------------------------------------------------------------------------------------
+   -- CAMERAS --
+   ----------------------------------------------------------------------------------------------->
+   <script>
+     class Camera {
+       Init(id, camera) {
+         this.id = id;
+         this.camera = camera;
+       }
+
+
+       Reset() {
+         console.log("Reset not implemented for", this.id);
+       }
+
+
+       MouseDown(e) {
+         console.log("MouseDown not implemented for", this.id);
+       }
+
+
+       MouseUp(e) {
+         console.log("MouseUp not implemented for", this.id);
+       }
+
+
+       MouseMove(e) {
+         console.log("MouseMove not implemented for", this.id);
+       }
+
+
+       MouseWheel(e) {
+         console.log("MouseWheel not implemented for", this.id);
+       }
+
+
+       UpdatePosition(chassisMesh) {
+         console.log("UpdatePosition not implemented for", this.id);
+       }
+
+
+       Resize(innerWidth, innerHeight) {
+         this.camera.aspect = innerWidth / innerHeight;
+         this.camera.updateProjectionMatrix();
+       }
+
+
+       Get() {
+         return this.camera;
+       }
+     }
+
+
+     class OrbitalCamera extends Camera {
+       /**
+        * Initializes the camera with default values.
+        */
+       Initialize(id, innerWidth, innerHeight) {
+         this.isMouseDown = false;
+         this.lastMouseX = 0;
+         this.lastMouseY = 0;
+
+
+         this.cameraTheta = Math.PI / 2;
+         this.cameraPhi = Math.PI / 3;
+         this.cameraRadius = 18;
+
+
+         const fov = 75;
+         const aspect = innerWidth / innerHeight;
+         const near = 0.1; // Camera frustum near plane.
+         const far = 1000; // Camera frustum far plane.
+
+
+         this.Init(id, new THREE.PerspectiveCamera(fov, aspect, near, far));
+       }
+
+
+       /**
+        * Resets the camera to the Orbit one and at a default position.
+        */
+       Reset() {
+         this.cameraTheta = Math.PI;
+         this.cameraPhi = Math.PI / 6;
+         this.cameraRadius = 18;
+       }
+
+
+       /**
+        * Starts moving the camera in response to mouse events.
+        */
+       MouseDown(e) {
+         if (this.staticMode) return;
+         this.isMouseDown = true;
+         this.lastMouseX = e.clientX;
+         this.lastMouseY = e.clientY;
+       }
+
+
+       /**
+        * Stops moving the camera when the mouse button is released.
+        */
+       MouseUp(e) {
+         if (this.staticMode) return;
+         this.isMouseDown = false;
+       }
+
+
+       /**
+        * Updates the camera position based on mouse movement.
+        */
+       MouseMove(e) {
+         if (!this.isMouseDown) return;
+         this.cameraTheta -= (e.clientX - this.lastMouseX) * 0.005;
+         this.cameraPhi -= (e.clientY - this.lastMouseY) * 0.005;
+         this.cameraPhi = Math.max(0.1, Math.min(Math.PI / 2.2, this.cameraPhi));
+         this.lastMouseX = e.clientX;
+         this.lastMouseY = e.clientY;
+       }
+
+
+       /**
+        * Updates the camera radius based on mouse wheel movement.
+        */
+       MouseWheel(e) {
+         if (this.staticMode) return;
+         this.cameraRadius += e.deltaY * 0.02;
+         this.cameraRadius = Math.max(8, Math.min(40, this.cameraRadius));
+       }
+
+
+       /**
+        * Updates the camera position based on the truck position.
+        */
+       UpdatePosition(chassisMesh) {
+         const truckPosition = chassisMesh.position;
+         const cameraTargetPosition = new THREE.Vector3(
+           truckPosition.x +
+             this.cameraRadius * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta),
+           truckPosition.y + (this.cameraRadius * Math.cos(this.cameraPhi)) / 2,
+           truckPosition.z +
+             this.cameraRadius * Math.sin(this.cameraPhi) * Math.cos(this.cameraTheta),
+         );
+         this.camera.position.lerp(cameraTargetPosition, 0.15);
+         this.camera.lookAt(truckPosition);
+       }
+     }
+
+
+     class FixedCamera extends Camera {
+       /**
+        * Initializes the camera with default values.
+        */
+       Initialize(id, innerWidth, innerHeight, cameraOffset, lookAtOffset) {
+         const fov = 75;
+         const aspect = innerWidth / innerHeight;
+         const near = 0.1; // Camera frustum near plane.
+         const far = 1000; // Camera frustum far plane.
+         this.Init(id, new THREE.PerspectiveCamera(fov, aspect, near, far));
+
+
+         // Camera position: over the hood
+         this.cameraOffset = cameraOffset;
+         // Ponto para onde a câmera olha (à frente do caminhão)
+         this.lookAtOffset = lookAtOffset;
+       }
+
+
+       /**
+        * Updates the camera position based on the truck position.
+        */
+       UpdatePosition(chassisMesh) {
+         const cameraPosition = chassisMesh.localToWorld(this.cameraOffset.clone());
+         this.camera.position.copy(cameraPosition);
+         const lookAtPosition = chassisMesh.localToWorld(this.lookAtOffset.clone());
+         this.camera.lookAt(lookAtPosition);
+       }
+     }
+
+
+     class CameraManager {
+       constructor() {
+         this.cameras = {};
+         this.orbitId = "orbital";
+       }
+
+
+       Initialize(innerWidth, innerHeight) {
+         this.AddOrbitalCamera(this.orbitId, innerWidth, innerHeight);
+         this.currentCamera = this.orbitId;
+       }
+
+
+       AddOrbitalCamera(id, innerWidth, innerHeight) {
+         this.cameras[id] = new OrbitalCamera();
+         this.cameras[id].Initialize(id, innerWidth, innerHeight);
+       }
+
+
+       AddFixedCamera(id, innerWidth, innerHeight, cameraOffset, lookAtOffset) {
+         this.cameras[id] = new FixedCamera();
+         this.cameras[id].Initialize(id, innerWidth, innerHeight, cameraOffset, lookAtOffset);
+       }
+
+
+       AddHoodCamera(innerWidth, innerHeight) {
+         // Camera position: over the hood
+         const cameraOffset = new THREE.Vector3(0, 2.5, 2.8);
+         // Ponto para onde a câmera olha (à frente do caminhão)
+         const lookAtOffset = new THREE.Vector3(0, 0, 15);
+         this.AddFixedCamera("hood", innerWidth, innerHeight, cameraOffset, lookAtOffset);
+       }
+
+
+       AddRearCamera(innerWidth, innerHeight) {
+         // Camera position: over the hood
+         const cameraOffset = new THREE.Vector3(0, 4.5, 0.5);
+         // Ponto para onde a câmera olha (à frente do caminhão)
+         const lookAtOffset = new THREE.Vector3(0, 0, -15);
+         this.AddFixedCamera("rear", innerWidth, innerHeight, cameraOffset, lookAtOffset);
+       }
+
+
+       AddLeftCamera(innerWidth, innerHeight) {
+         // Camera position: over the hood
+         const cameraOffset = new THREE.Vector3(1.5, 0.4, 1.6);
+         // Ponto para onde a câmera olha (à frente do caminhão)
+         const lookAtOffset = new THREE.Vector3(0, -2.5, 15);
+         this.AddFixedCamera("left", innerWidth, innerHeight, cameraOffset, lookAtOffset);
+       }
+
+
+       AddRightCamera(innerWidth, innerHeight) {
+         // Camera position: over the hood
+         const cameraOffset = new THREE.Vector3(-1.5, 0.4, 1.6);
+         // Ponto para onde a câmera olha (à frente do caminhão)
+         const lookAtOffset = new THREE.Vector3(0, -2.5, 15);
+         this.AddFixedCamera("right", innerWidth, innerHeight, cameraOffset, lookAtOffset);
+       }
+
+
+       isOrbital() {
+         return this.currentCamera == this.orbitId;
+       }
+
+
+       SwitchTo(id) {
+         if ((!id) in this.cameras) {
+           console.log("Camera not found: ", id);
+           return;
+         }
+         this.currentCamera = id;
+         this.Reset();
+       }
+
+
+       Reset() {
+         this.cameras[this.currentCamera].Reset();
+       }
+
+
+       MouseDown(e) {
+         if (!this.isOrbital()) return;
+         this.cameras[this.currentCamera].MouseDown(e);
+       }
+
+
+       MouseUp(e) {
+         if (!this.isOrbital()) return;
+         this.cameras[this.currentCamera].MouseUp(e);
+       }
+
+
+       MouseMove(e) {
+         if (!this.isOrbital()) return;
+         this.cameras[this.currentCamera].MouseMove(e);
+       }
+
+
+       MouseWheel(e) {
+         if (!this.isOrbital()) return;
+         this.cameras[this.currentCamera].MouseWheel(e);
+       }
+
+
+       UpdatePosition(chassisMesh) {
+         this.cameras[this.currentCamera].UpdatePosition(chassisMesh);
+       }
+
+
+       Resize(innerWidth, innerHeight) {
+         this.cameras[this.currentCamera].Resize(innerWidth, innerHeight);
+       }
+
+
+       Get() {
+         return this.cameras[this.currentCamera].Get();
+       }
+     }
+   </script>
+
+
+   <!----------------------------------------------------------------------------------------------
+   -- KEYBOARD CONTROLER --
+   ----------------------------------------------------------------------------------------------->
+   <script>
+     class KeyboardController {
+       Initialize() {
+         this.keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+         this.brakeDirection = 0;
+       }
+
+
+       HandleKeyDown(e) {
+         if (this.keys.hasOwnProperty(e.key)) {
+           this.keys[e.key] = true;
+         }
+       }
+
+
+       HandleKeyUp(e) {
+         if (this.keys.hasOwnProperty(e.key)) {
+           this.keys[e.key] = false;
+         }
+         if (e.key == "ArrowUp" || e.key == "ArrowDown") {
+           this.brakeDirection = 0;
+         }
+       }
+
+
+       /**
+        * Controls steering wheel based on keyboard input.
+        * Returns a percentage of the steering wheel to be turned. -1 for left, 1 for right.
+        */
+       getSteering() {
+         if (this.keys.ArrowLeft) return -1;
+         if (this.keys.ArrowRight) return 1;
+         return 0;
+       }
+
+
+       /**
+        * Controls the vehicle acceleration based on keyboard input.
+        * @param {string} movementDirection: >0 for forward, <0 for backward.
+        * Returns a percentage of the acceleration. 1 for forward, -1 for backward.
+        */
+       getThrottle(movementDirection) {
+         if (this.brakeDirection !== 0) return 0; // No throttle if braking.
+
+
+         // If vehicle is stopped and we are not braking, start throttling.
+         if (movementDirection === 0) {
+           if (this.keys.ArrowUp) return 1;
+           if (this.keys.ArrowDown) return -1;
+         }
+
+
+         // If command is in the same direction as the movement direction, throttle.
+         if (movementDirection > 0 && this.keys.ArrowUp) return 1;
+         if (movementDirection < 0 && this.keys.ArrowDown) return -1;
+
+
+         return 0;
+       }
+
+
+       /**
+        * Controls the vehicle Braking based on keyboard input.
+        * @param {string} movementDirection: >0 for forward, <0 for backward.
+        * Returns a percentage of the Brakeing force. 1 for forward, -1 for backward.
+        */
+       getBrake(movementDirection) {
+         if (this.brakeDirection !== 0) return 1; // If braking then keep braking.
+
+
+         if (
+           (movementDirection > 0 && this.keys.ArrowDown) ||
+           (movementDirection < 0 && this.keys.ArrowUp)
+         ) {
+           this.brakeDirection = movementDirection;
+           return 1;
+         }
+         return 0;
+       }
+     }
+   </script>
+
+
+   <!----------------------------------------------------------------------------------------------
+   -- GLOBAL VARIABLES --
+   ----------------------------------------------------------------------------------------------->
+   <script>
+     let keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+     let scene, camera, renderer, world, clock;
+     let vehicle,
+       w900,
+       chassisMesh,
+       wheelMeshes = [];
+
+
+     const keyboardController = new KeyboardController();
+
+
+     let gameEnded = false,
+       hasEnteredZone = false;
+     let testResult = { passed: false, reason: "" };
+     let parkingBrakeOn = false;
+
+
+     let print = 1;
+     function LOG(msg) {
+       if (print % 50 === 0) console.log(msg);
+     }
+
+
+     class Truck {
+       constructor(physics) {
+         this.physics = physics;
+         this.previousDirection = 0;
+       }
+
+
+       /**
+        * Returns:
+        * -1 if car is moving backwards
+        * 0 if car is stopped
+        * 1 if car is moving forward
+        */
+       isMoving() {
+         const threshold = 0.005;
+         // Pick the only wheels that are not used for parking brakes.
+         const avgSpeed =
+           (this.physics.wheelInfos[2].deltaRotation + this.physics.wheelInfos[3].deltaRotation) /
+           2;
+
+
+         if (avgSpeed < -threshold) {
+           return 1;
+         }
+         if (avgSpeed > threshold) {
+           return -1;
+         }
+         return 0;
+       }
+     }
+
+
+     /**
+      * Função principal que inicializa e orquestra a criação do jogo.
+      */
+     function init() {
+       setupSceneAndPhysics();
+       createEnvironment();
+       createVehicle();
+       setupControls();
+       keyboardController.Initialize();
+       switchParkingBreak(); // Start with brakes on
+       animate();
+     }
+
+
+     /**
+      * Configura a cena 3D (Three.js) e o mundo da física (Cannon.js).
+      */
+     function setupSceneAndPhysics() {
+       // Cena e Renderer
+       scene = new THREE.Scene();
+       scene.background = new THREE.Color(0x87ceeb);
+       renderer = new THREE.WebGLRenderer({ antialias: true });
+       renderer.setSize(window.innerWidth, window.innerHeight);
+       renderer.shadowMap.enabled = true;
+       document.body.appendChild(renderer.domElement);
+
+
+       // Câmera
+       camera = new CameraManager();
+       camera.Initialize(window.innerWidth, window.innerHeight);
+       camera.AddHoodCamera(window.innerWidth, window.innerHeight);
+       camera.AddRearCamera(window.innerWidth, window.innerHeight);
+       camera.AddLeftCamera(window.innerWidth, window.innerHeight);
+       camera.AddRightCamera(window.innerWidth, window.innerHeight);
+
+
+       // Luzes
+       scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+       const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+       dirLight.position.set(20, 30, 20);
+       dirLight.castShadow = true;
+       dirLight.shadow.camera.top = 20;
+       dirLight.shadow.camera.bottom = -20;
+       dirLight.shadow.camera.left = -20;
+       dirLight.shadow.camera.right = 20;
+       scene.add(dirLight);
+
+
+       // Física
+       world = new CANNON.World();
+       world.gravity.set(0, -9.82, 0);
+       world.broadphase = new CANNON.SAPBroadphase(world);
+       world.solver.iterations = 10;
+
+
+       const concreteMaterial = new CANNON.Material("concreteMaterial");
+       const tireMaterial = new CANNON.Material("tireMaterial");
+       const wheelGroundContactMaterial = new CANNON.ContactMaterial(
+         concreteMaterial,
+         tireMaterial,
+         {
+           friction: 0.3,
+           restitution: 0,
+           contactEquationStiffness: 1000,
+         },
+       );
+
+
+       // Clock
+       clock = new THREE.Clock();
+     }
+
+
+     /**
+      * Cria os elementos do cenário: chão, vaga e cones.
+      */
+     function createEnvironment() {
+       createGround(scene, world);
+       createParkingZone(scene);
+
+
+       // Posições dos cones
+       [
+         { x: -1.75, z: -4 },
+         { x: 1.75, z: -4 },
+         { x: -1.75, z: 4 },
+         { x: 1.75, z: 4 },
+       ].forEach((pos) => createCone(pos.x, pos.z, scene, world));
+     }
+
+
+     /**
+      * Cria o chão visual e físico.
+      */
+     function createGround(scene, world) {
+       const groundGeometry = new THREE.PlaneGeometry(100, 100);
+       const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x909090 });
+       const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+       groundMesh.rotation.x = -Math.PI / 2;
+       groundMesh.receiveShadow = true;
+       scene.add(groundMesh);
+
+
+       const groundShape = new CANNON.Box(new CANNON.Vec3(50, 0.1, 50));
+       const groundBody = new CANNON.Body({
+         mass: 0,
+         shape: groundShape,
+         material: new CANNON.Material("groundMaterial"),
+       });
+       groundBody.position.y = -0.1;
+       world.addBody(groundBody);
+     }
+
+
+     /**
+      * Cria a área de estacionamento amarela.
+      */
+     function createParkingZone(scene) {
+       const parkingZoneGeometry = new THREE.PlaneGeometry(3.5, 8);
+       const parkingZoneMaterial = new THREE.MeshBasicMaterial({
+         color: 0xffd700,
+         transparent: true,
+         opacity: 0.4,
+         side: THREE.DoubleSide,
+       });
+       const parkingZoneMesh = new THREE.Mesh(parkingZoneGeometry, parkingZoneMaterial);
+       parkingZoneMesh.position.set(0, 0.01, 0);
+       parkingZoneMesh.rotation.x = -Math.PI / 2;
+       scene.add(parkingZoneMesh);
+     }
+
+
+     /**
+      * Cria um cone individual.
+      */
+     function createCone(x, z, scene, world) {
+       const coneHeight = 0.8,
+         coneRadius = 0.3;
+       const coneMesh = new THREE.Mesh(
+         new THREE.ConeGeometry(coneRadius, coneHeight, 16),
+         new THREE.MeshStandardMaterial({ color: 0xff4500 }),
+       );
+       coneMesh.position.set(x, coneHeight / 2, z);
+       coneMesh.castShadow = true;
+       scene.add(coneMesh);
+
+
+       const coneBody = new CANNON.Body({
+         mass: 1,
+         shape: new CANNON.Cylinder(coneRadius, coneRadius, coneHeight, 16),
+       });
+       coneBody.position.copy(coneMesh.position);
+       world.addBody(coneBody);
+       coneBody.addEventListener("collide", (event) => {
+         if (event.body === vehicle.chassisBody) {
+           endTest(false, "Você bateu em um cone.");
+         }
+       });
+     }
+
+
+     /**
+      * Monta o veículo, incluindo sua física e modelo visual.
+      */
+     function createVehicle() {
+       // 1. Física do Veículo
+       const chassisShape = new CANNON.Box(new CANNON.Vec3(1.2, 0.5, 3));
+       const chassisBody = new CANNON.Body({ mass: 1500 });
+       chassisBody.addShape(chassisShape);
+       chassisBody.position.set(0, 4, -10);
+
+
+       vehicle = new CANNON.RaycastVehicle({
+         chassisBody: chassisBody,
+         indexRightAxis: 0,
+         indexUpAxis: 1,
+         indexForwardAxis: 2,
+       });
+
+
+       // 2. Física das Rodas
+       const wheelOptions = {
+         radius: 0.5,
+         directionLocal: new CANNON.Vec3(0, -1, 0),
+         suspensionStiffness: 30,
+         suspensionRestLength: 0.3,
+         frictionSlip: 1.4,
+         dampingRelaxation: 2.3,
+         dampingCompression: 4.4,
+         maxSuspensionForce: 100000,
+         rollInfluence: 0.01,
+         axleLocal: new CANNON.Vec3(-1, 0, 0),
+         chassisConnectionPointLocal: new CANNON.Vec3(),
+         maxSuspensionTravel: 0.3,
+         // This makes the wheels of the truck to slide strange when the car has a truck axle.
+         // customSlidingRotationalSpeed: -30,
+         // useCustomSlidingRotationalSpeed: true,
+       };
+       [
+         { x: 1, z: 2.8 },
+         { x: -1, z: 2.8 },
+         { x: 1, z: -1.5 },
+         { x: -1, z: -1.5 },
+         { x: 1, z: -2.8 },
+         { x: -1, z: -2.8 },
+       ].forEach((pos) => {
+         wheelOptions.chassisConnectionPointLocal.set(pos.x, 0, pos.z);
+         vehicle.addWheel(wheelOptions);
+       });
+       vehicle.addToWorld(world);
+
+
+       // 3. Modelo Visual do Chassi
+       chassisMesh = new THREE.Group();
+       const truckModel = createTruckModel(); // Cria o modelo 3D
+       chassisMesh.add(truckModel);
+       scene.add(chassisMesh);
+
+
+       // 4. Modelos Visuais das Rodas
+       const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+       const wheelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 32);
+       wheelGeometry.rotateZ(Math.PI / 2);
+
+
+       vehicle.wheelInfos.forEach(() => {
+         // Criar um grupo para cada roda (pneu + indicador)
+         const wheelGroup = new THREE.Group();
+
+
+         // Criar o pneu preto
+         const tireMesh = new THREE.Mesh(wheelGeometry, wheelMaterial);
+         tireMesh.castShadow = true;
+         wheelGroup.add(tireMesh);
+
+
+         // Criar um indicador visual (uma linha branca na lateral)
+         const indicatorGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.05); // Comprido, fino
+         const indicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+         const indicatorMesh = new THREE.Mesh(indicatorGeometry, indicatorMaterial);
+
+
+         // Posicionar o indicador na "face" externa da roda
+         indicatorMesh.position.set(0, 0, 0.22); // Deslocado no eixo Z (profundidade da roda)
+         wheelGroup.add(indicatorMesh);
+
+
+         scene.add(wheelGroup);
+         wheelMeshes.push(wheelGroup); // Adicionar o grupo ao array de rodas
+       });
+
+
+       w900 = new Truck(vehicle);
+     }
+
+
+     /**
+      * Cria o modelo 3D do caminhão (sem física).
+      */
+     function createTruckModel() {
+       const group = new THREE.Group();
+       const darkRed = new THREE.MeshStandardMaterial({
+         color: 0x8b0000,
+         metalness: 0.1,
+         roughness: 0.7,
+       });
+       const chrome = new THREE.MeshStandardMaterial({
+         color: 0xc0c0c0,
+         metalness: 0.8,
+         roughness: 0.2,
+       });
+       const glass = new THREE.MeshStandardMaterial({
+         color: 0x000000,
+         transparent: true,
+         opacity: 0.4,
+       });
+
+
+       // Cabine principal, capô, etc.
+       const cab = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.2, 2.4), darkRed);
+       cab.position.set(0, 1.2, -0.2);
+       cab.castShadow = true;
+       group.add(cab);
+
+
+       const hood = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.3, 3), darkRed);
+       hood.position.set(0, 0.75, 2.2);
+       hood.castShadow = true;
+       group.add(hood);
+
+
+       const grilleMesh = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.4, 0.1), chrome);
+       grilleMesh.position.set(0, 0.8, 3.7);
+       group.add(grilleMesh);
+
+
+       const bumperMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 0.2), chrome);
+       bumperMesh.position.set(0, 0.15, 3.8);
+       group.add(bumperMesh);
+
+
+       const windshieldMesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 0.1), glass);
+       windshieldMesh.position.set(0, 1.6, 0.95);
+       group.add(windshieldMesh);
+
+
+       // Escapamentos e tanques
+       [-1.3, 1.3].forEach((x) => {
+         const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3.5, 12), chrome);
+         exhaust.position.set(x, 1.85, -1.5);
+         exhaust.castShadow = true;
+         group.add(exhaust);
+       });
+       return group;
+     }
+
+
+     /**
+      * Configura todos os listeners de eventos para controle.
+      */
+     function setupControls() {
+       document.addEventListener("keydown", (e) => {
+         keyboardController.HandleKeyDown(e);
+         if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+         if (e.key.toLowerCase() === "0") {
+           camera.SwitchTo("orbital");
+         }
+         if (e.key === "2") {
+           camera.SwitchTo("hood");
+         }
+         if (e.key === "3") {
+           camera.SwitchTo("rear");
+         }
+         if (e.key === "4") {
+           camera.SwitchTo("left");
+         }
+         if (e.key === "5") {
+           camera.SwitchTo("right");
+         }
+         // Lógica do freio de estacionamento
+         if (e.key === " ") {
+           e.preventDefault(); // Evita que a página role
+           switchParkingBreak();
+         }
+       });
+       document.addEventListener("keyup", (e) => {
+         keyboardController.HandleKeyUp(e);
+         if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+       });
+       document.addEventListener("mousedown", (e) => {
+         camera.MouseDown(e);
+       });
+       document.addEventListener("mouseup", (e) => {
+         camera.MouseUp(e);
+       });
+       document.addEventListener("mousemove", (e) => {
+         camera.MouseMove(e);
+       });
+       document.addEventListener("wheel", (e) => {
+         camera.MouseWheel(e);
+       });
+       document
+         .getElementById("restart-button")
+         .addEventListener("click", () => location.reload());
+       document.getElementById("close-info-button").addEventListener("click", () => {
+         document.getElementById("game-info-panel").style.display = "none";
+       });
+     }
+
+
+     /**
+      * Lida com a movimentação do veículo baseada nas teclas pressionadas.
+      */
+     function handleVehicleControls() {
+       const maxSteerVal = -0.6;
+       const maxForce = -2000;
+       const maxBrakeForce = 3000;
+       const parkingBrakeForce = 50;
+
+
+       // Clear all forces.
+       for (let i = 0; i < 6; i++) {
+         vehicle.applyEngineForce(0, i);
+         vehicle.setBrake(0, i);
+       }
+
+
+       vehicle.setSteeringValue(keyboardController.getSteering() * maxSteerVal, 0);
+       vehicle.setSteeringValue(keyboardController.getSteering() * maxSteerVal, 1);
+
+
+       if (parkingBrakeOn) {
+         vehicle.setBrake(parkingBrakeForce, 0);
+         vehicle.setBrake(parkingBrakeForce, 1);
+         vehicle.setBrake(parkingBrakeForce, 4);
+         vehicle.setBrake(parkingBrakeForce, 5);
+       }
+
+
+       const isMoving = w900.isMoving();
+       let throttle = keyboardController.getThrottle(isMoving) * maxForce;
+       let brake = keyboardController.getBrake(isMoving) * maxBrakeForce;
+       LOG("isMoving: " + isMoving);
+       LOG("throttle: " + throttle);
+       LOG("brake: " + brake);
+
+
+       if (brake > 0) {
+         if (!isMoving) {
+           vehicle.setBrake(brake, 0);
+           vehicle.setBrake(brake, 1);
+           vehicle.setBrake(brake, 4);
+           vehicle.setBrake(brake, 5);
+         } else {
+           brake = brake * isMoving;
+           for (let i = 0; i < 6; i++) {
+             // All wheels break
+             vehicle.applyEngineForce(brake, i);
+           }
+         }
+       }
+       if (throttle !== 0) {
+         for (let i = 2; i < 6; i++) {
+           vehicle.applyEngineForce(throttle, i);
+         }
+       }
+       w900.previousDirection = isMoving;
+     }
+
+
+     /**
+      * Verifica as condições de vitória ou derrota.
+      */
+     function checkWinLossConditions() {
+       const pos = vehicle.chassisBody.position;
+       const quat = vehicle.chassisBody.quaternion;
+       const speed = vehicle.chassisBody.velocity.length();
+       const angleY = 2 * Math.atan2(quat.y, quat.w);
+       const isInParkingZone = Math.abs(pos.x) < 1.75 && Math.abs(pos.z) < 4;
+
+
+       if (isInParkingZone) {
+         hasEnteredZone = true;
+         if (speed < 0.1 && Math.abs(angleY) < 0.2) {
+           endTest(true, "Estacionado com sucesso.");
+         }
+       }
+     }
+
+
+     /**
+      * Atualiza o velocímetro na interface.
+      */
+     function updateSpeedometer() {
+       const speed = vehicle.chassisBody.velocity.length(); // Velocidade em m/s
+       const speedKmh = Math.floor(speed * 3.6);
+       const speedometerElement = document.getElementById("speedometer");
+       if (speedometerElement) {
+         speedometerElement.innerText = `${speedKmh} km/h`;
+       }
+     }
+
+
+     /**
+      * Ativa ou desativa o freio de mão.
+      */
+     function switchParkingBreak() {
+       parkingBrakeOn = !parkingBrakeOn;
+       const brakeIndicator = document.getElementById("parking-brake-indicator");
+       brakeIndicator.style.display = parkingBrakeOn ? "block" : "none";
+       // call vehicle control
+     }
+
+
+     /**
+      * Finaliza o teste, mostrando a mensagem e congelando o caminhão.
+      */
+     function endTest(passed, reason) {
+       if (gameEnded) return;
+       gameEnded = true;
+       testResult = { passed, reason };
+
+
+       vehicle.chassisBody.type = CANNON.Body.STATIC;
+       vehicle.chassisBody.updateMassProperties();
+
+
+       const msgBox = document.getElementById("message-box");
+       document.getElementById("message-text").innerText = passed ? "Aprovado!" : "Reprovado!";
+       msgBox.classList.toggle("fail", !passed);
+       msgBox.style.display = "block";
+       document.getElementById("gemini-feedback-button").disabled = false;
+       document.getElementById("feedback-display").style.display = "none";
+       document.getElementById("feedback-display").innerHTML = "";
+     }
+
+
+     /**
+      * O loop principal de animação e lógica do jogo.
+      */
+     function animate() {
+       if (gameEnded) {
+         return;
+       }
+       handleVehicleControls();
+       checkWinLossConditions();
+
+
+       print += 1;
+
+
+       if (!document.body.contains(renderer.domElement)) return;
+       requestAnimationFrame(animate);
+
+
+       const deltaTime = clock.getDelta();
+       world.step(1 / 60, deltaTime);
+
+
+       chassisMesh.position.copy(vehicle.chassisBody.position);
+       chassisMesh.quaternion.copy(vehicle.chassisBody.quaternion);
+       for (let i = 0; i < wheelMeshes.length; i++) {
+         vehicle.updateWheelTransform(i);
+         wheelMeshes[i].position.copy(vehicle.wheelInfos[i].worldTransform.position);
+         wheelMeshes[i].quaternion.copy(vehicle.wheelInfos[i].worldTransform.quaternion);
+       }
+
+
+       updateSpeedometer();
+       camera.UpdatePosition(chassisMesh);
+       renderer.render(scene, camera.Get());
+     }
+
+
+     // --- INICIAR JOGO ---
+     window.addEventListener("resize", () => {
+       camera.Resize(window.innerWidth, window.innerHeight);
+       renderer.setSize(window.innerWidth, window.innerHeight);
+     });
+
+
+     window.onload = init;
+   </script>
+ </body>
+</html>

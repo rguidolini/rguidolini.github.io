@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor 3D Kenworth W900</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            display: block;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.2);
+            pointer-events: none;
+        }
+
+        #info h1 {
+            margin: 0;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        #info p {
+            margin: 5px 0 0 0;
+            font-size: 0.9em;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 101;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            width: 300px;
+        }
+
+        #controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 1.1em;
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+            cursor: move;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group h4 {
+            margin: 0 0 10px 0;
+            font-size: 1em;
+            color: #aaa;
+            text-align: center;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .control-row label {
+            width: 35px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .control-row input[type="number"] {
+            flex-grow: 1;
+            background-color: #222;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 5px;
+            font-family: monospace;
+            text-align: right;
+            -moz-appearance: textfield;
+            /* Firefox */
+        }
+
+        .control-row input[type="number"]::-webkit-outer-spin-button,
+        .control-row input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        #partSelector {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            margin-bottom: 15px;
+        }
+
+        #resetButton {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #c23b22;
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        #resetButton:hover {
+            background-color: #a0301c;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div>
+        <div id="info">
+            <h1>Editor 3D - Kenworth W900</h1>
+            <p>Clique em uma peça ou use o menu para selecionar | Arraste para girar | Role para ampliar</p>
+        </div>
+
+        <div id="controls">
+            <h3>Editor de Peças</h3>
+            <select id="partSelector"></select>
+
+            <div class="control-group">
+                <h4>Posição (m)</h4>
+                <div class="control-row">
+                    <label for="posX">X:</label>
+                    <input type="number" id="posX" step="0.05">
+                </div>
+                <div class="control-row">
+                    <label for="posY">Y:</label>
+                    <input type="number" id="posY" step="0.05">
+                </div>
+                <div class="control-row">
+                    <label for="posZ">Z:</label>
+                    <input type="number" id="posZ" step="0.05">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4>Rotação (°)</h4>
+                <div class="control-row">
+                    <label for="rotX">X:</label>
+                    <input type="number" id="rotX" step="1">
+                </div>
+                <div class="control-row">
+                    <label for="rotY">Y:</label>
+                    <input type="number" id="rotY" step="1">
+                </div>
+                <div class="control-row">
+                    <label for="rotZ">Z:</label>
+                    <input type="number" id="rotZ" step="1">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4>Tamanho (m)</h4>
+                <div class="control-row">
+                    <label for="sizeX">X:</label>
+                    <input type="number" id="sizeX" step="0.05" min="0.01">
+                </div>
+                <div class="control-row">
+                    <label for="sizeY">Y:</label>
+                    <input type="number" id="sizeY" step="0.05" min="0.01">
+                </div>
+                <div class="control-row">
+                    <label for="sizeZ">Z:</label>
+                    <input type="number" id="sizeZ" step="0.05" min="0.01">
+                </div>
+            </div>
+
+            <button id="resetButton">Resetar Peça</button>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+        import { TireWheelSet } from './wheel.js';
+        import { CreateMirror } from './mirrors.js';
+        import { createSunVisor } from './sunvisor.js';
+
+        let scene, camera, renderer, controls, raycaster, mouse;
+        let truckParts = {};
+        let selectedPart = null;
+        let originalTransforms = new Map();
+        let outlineHelper;
+
+        // --- INICIALIZAÇÃO DA CENA ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x333333);
+            scene.fog = new THREE.Fog(0x333333, 20, 70);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(-10, 5, 12);
+            camera.lookAt(0, 2, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+            directionalLight.position.set(-15, 20, 20);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.top = 20;
+            directionalLight.shadow.camera.bottom = -20;
+            directionalLight.shadow.camera.left = -20;
+            directionalLight.shadow.camera.right = 20;
+            scene.add(directionalLight);
+            const directionalLight2 = directionalLight.clone();
+            directionalLight2.position.set(15, 20, -20);
+            scene.add(directionalLight2);
+
+            const groundGeo = new THREE.PlaneGeometry(100, 100);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.9 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            createTruck();
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 2, 0);
+            controls.enableDamping = false;
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('click', onDocumentMouseClick, false);
+
+            setupInteractiveControls();
+            makePanelDraggable();
+            animate();
+        }
+
+        // --- CRIAÇÃO DO CAMINHÃO ---
+        function createTruck() {
+            const truck = new THREE.Group();
+            truck.name = "CaminhaoCompleto";
+            scene.add(truck);
+
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x990000, metalness: 0.6, roughness: 0.4 });
+            const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.6, roughness: 0.4 });
+            const chromeMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1.0, roughness: 0.0 });
+            const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+            const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.9 });
+            const lightMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff0c4, emissiveIntensity: 0.8 });
+            const rubberMaterial = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.1, roughness: 0.8 });
+
+            const addPart = (name, object) => {
+                object.name = name;
+                object.castShadow = true;
+                object.receiveShadow = true;
+
+                const box = new THREE.Box3().setFromObject(object);
+                const size = box.getSize(new THREE.Vector3());
+
+                truck.add(object);
+                truckParts[name] = object;
+                originalTransforms.set(object, {
+                    position: object.position.clone(),
+                    rotation: object.rotation.clone(),
+                    scale: object.scale.clone(),
+                    size: size
+                });
+            };
+
+            // --- PEÇAS DO CAMINHÃO ---
+            const chassiH = 0.30;
+            const chassiL = 7.85;  // This will result in a total length of 7.90 m
+            const chassiY = 1.30;
+            const chassiZ = 0;
+            addPart("Chassi", new THREE.Mesh(new THREE.BoxGeometry(0.8, chassiH, chassiL), blackMaterial));
+            truckParts.Chassi.position.y = chassiY;
+            truckParts.Chassi.position.z = chassiZ;
+
+            const bumperW = 2.40;
+            const bumperL = 0.10;
+            const bumperZ = chassiZ + chassiL / 2;
+            addPart("Parachoque", new THREE.Mesh(new RoundedBoxGeometry(bumperW, 0.50, bumperL, 4, 0.02), chromeMaterial));
+            truckParts.Parachoque.position.set(0, 1.05, bumperZ);
+
+            const grillY = 1.86;
+            const grillL = 0.05;
+            const grillH = 1.13;
+            const grillZ = bumperZ + bumperL / 2 - grillL / 2;
+            addPart("Grade", createGrille(grillH, 0.05, grillH, chromeMaterial));
+            truckParts.Grade.position.set(0, grillY, grillZ);
+
+            const emblemY = 2.38;
+            const emblemZ = grillZ + grillL / 2 + 0.005;
+            addPart("Emblem", createEmblem());
+            truckParts.Emblem.position.set(0, emblemY, emblemZ);
+
+            const hoodH = 1.13;
+            const hoodW = 1.13;
+            const hoodL = 1.90;
+            const hoodY = chassiY + chassiH / 2 + hoodH / 2 - 0.15;
+            const hoodZ = grillZ - hoodL / 2; //To reduce a bit the rounded corner 3.44;
+            addPart("Capo", new THREE.Mesh(new RoundedBoxGeometry(hoodW, hoodH, hoodL, 4, 0.05), bodyMaterial));
+            truckParts.Capo.position.set(0, hoodY, hoodZ);
+
+            const cabinH = 1.78;
+            const cabinL = 1.18;
+            const cabinW = 1.88;
+            const cabinY = chassiY + chassiH / 2 + cabinH / 2;
+            const cabinZ = hoodZ - hoodL / 2 - cabinL / 2 + 0.05;  // 5 is because of rounded corners
+            const cabinGroup = new THREE.Group();
+            const cabinMesh = new THREE.Mesh(new RoundedBoxGeometry(cabinW, cabinH, cabinL, 8, 0.1), bodyMaterial)
+            cabinMesh.castShadow = true;
+            cabinMesh.receiveShadow = true;
+            cabinGroup.add(cabinMesh);
+
+            const windShieldH = 0.6;
+            const windShieldMesh = new THREE.Mesh(new RoundedBoxGeometry(cabinW - 0.2, windShieldH, 0.01, 8, 0.1), glassMaterial);
+            windShieldMesh.position.z = cabinL / 2;
+            windShieldMesh.position.y = cabinH / 2 - windShieldH / 2 - 0.2;
+            cabinGroup.add(windShieldMesh);
+
+            const sideWindowH = 0.6;
+            const sideWindowL = 0.8;
+            const sideWindowMesh = new THREE.Mesh(new RoundedBoxGeometry(cabinW + 0.02, sideWindowH, sideWindowL, 8, 0.02), glassMaterial);
+            sideWindowMesh.position.z = cabinL / 2 - sideWindowL / 2 - 0.1;
+            sideWindowMesh.position.y = cabinH / 2 - sideWindowH / 2 - 0.2;
+            cabinGroup.add(sideWindowMesh);
+
+            addPart("Cabine", cabinGroup);
+            truckParts.Cabine.position.set(0, cabinY, cabinZ);
+
+            const sleepH = 2.38;
+            const sleepL = 2.00;
+            const sleepW = 2.36;
+            const sleepY = chassiY + chassiH / 2 + sleepH / 2;
+            const sleepZ = cabinZ - cabinL / 2 - sleepL / 2 + 0.05;  // 5 is because of rounded corners
+            const sleepGroup = new THREE.Group();
+            const sleepMesh = new THREE.Mesh(new RoundedBoxGeometry(sleepW, sleepH, sleepL, 8, 0.1), bodyMaterial);
+            sleepMesh.castShadow = true;
+            sleepMesh.receiveShadow = true;
+            sleepGroup.add(sleepMesh);
+
+            const sleepWindowH = 0.93;
+            const sleepWindowL = 0.61;
+            const sleepWindowMesh = new THREE.Mesh(new RoundedBoxGeometry(sleepW + 0.02, sleepWindowH, sleepWindowL, 8, 0.02), glassMaterial);
+            sleepWindowMesh.position.y = -(sleepH / 2 - sleepWindowH / 2 - 0.61);
+            sleepWindowMesh.position.z = -(sleepL / 2 - sleepWindowL / 2 - 0.24);
+            sleepGroup.add(sleepWindowMesh);
+
+            addPart("MirrorLeft", CreateMirror(true));
+            truckParts.MirrorLeft.position.set(0.96, 2.40, 2.04);
+            addPart("mirrorRight", CreateMirror(false));
+            truckParts.mirrorRight.position.set(-0.96, 2.40, 2.04);
+            addPart("sunvisor", createSunVisor(1.90, 3, 45));
+            truckParts.sunvisor.position.set(0, 3.13, 2.25);
+
+            addPart("Leito", sleepGroup);
+            truckParts.Leito.position.set(0, sleepY, sleepZ);
+
+            const exaustR = 0.09;
+            const exaustH = 3.38;
+            const exaustY = chassiY - chassiH / 2 + exaustH / 2;
+            const exaustZ = sleepZ + sleepL / 2 + exaustR;
+            const exaustX = cabinW / 2 + exaustR;
+            const stackGeo = new THREE.CylinderGeometry(exaustR, exaustR, exaustH, 16);
+            addPart("exaustRight", new THREE.Mesh(stackGeo, chromeMaterial));
+            truckParts.exaustRight.position.set(-exaustX, exaustY, exaustZ);
+            addPart("exaustLeft", new THREE.Mesh(stackGeo, chromeMaterial));
+            truckParts.exaustLeft.position.set(exaustX, exaustY, exaustZ);
+
+            const tankR = 0.33;
+            const tankL = 1.73;
+            const tankX = sleepW / 2 - tankR;
+            const tankY = sleepY - sleepH / 2 - tankR;
+            const tankZ = sleepZ;
+            const tankGeo = new THREE.CylinderGeometry(tankR, tankR, tankL, 32);
+            const leftTankMesh = new THREE.Mesh(tankGeo, chromeMaterial);
+            leftTankMesh.castShadow = true;
+            leftTankMesh.receiveShadow = true;
+            leftTankMesh.rotation.x = Math.PI / 2;
+            addPart("leftTank", leftTankMesh);
+            truckParts.leftTank.position.set(tankX, tankY, tankZ);
+
+            const rightTankMesh = leftTankMesh.clone();
+            addPart("rightTank", rightTankMesh);
+            truckParts.rightTank.position.set(-tankX, tankY, tankZ);
+
+            const doorSteps = (leftSide) => {
+                function createDiamondPlateTexture() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 128;
+                    canvas.height = 128;
+                    const context = canvas.getContext('2d');
+
+                    // Fill background
+                    const backgroundColor = '#b8b8b8';
+                    context.fillStyle = backgroundColor;
+                    context.fillRect(0, 0, 128, 128);
+
+                    // Draw the pattern
+                    context.fillStyle = '#d1d1d1';
+                    context.strokeStyle = '#a0a0a0';
+                    context.lineWidth = 1;
+
+                    const step = 16;
+                    for (let i = -step; i < 128 + step; i += step) {
+                        for (let j = -step; j < 128 + step; j += step) {
+                            context.save();
+                            context.translate(i, j);
+                            context.rotate(Math.PI / 4);
+                            context.fillRect(-step / 4, -step / 8, step / 2, step / 4);
+                            context.strokeRect(-step / 4, -step / 8, step / 2, step / 4);
+                            context.restore();
+                        }
+                    }
+
+                    const texture = new THREE.CanvasTexture(canvas);
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    return texture;
+                }
+                const diamondTexture = createDiamondPlateTexture();
+                diamondTexture.repeat.set(1, 1);
+
+                const metalMaterial = new THREE.MeshStandardMaterial({
+                    map: diamondTexture,
+                    metalness: 0.9,
+                    roughness: 0.4,
+                    color: 0xc0c0c0, // Silver
+                });
+
+                const stepsGroup = new THREE.Group();
+
+                const bkgndH = 0.55;
+                const bkgndW = 0.05;
+                const bkgndL = 1.55;
+                const background = new THREE.Mesh(new THREE.BoxGeometry(bkgndW, bkgndH, bkgndL), metalMaterial);
+
+                const stepH = 0.05;
+                const stepL = 0.90;
+                const stepZ = 0.20;
+                const bottonW = 0.50;
+                const topW = 0.40;
+                const top = new THREE.Mesh(new THREE.BoxGeometry(topW, stepH, stepL), metalMaterial);
+                const botton = new THREE.Mesh(new THREE.BoxGeometry(bottonW, stepH, stepL), metalMaterial);
+
+                background.position.y = -bkgndH / 2;
+                top.position.y = -0.15;
+                top.position.z = -stepZ;
+                botton.position.y = -2 * bkgndH / 2 + stepH / 2;
+                botton.position.z = -stepZ;
+
+                if (leftSide) {
+                    background.position.x = bkgndW / 2;
+                    top.position.x = topW / 2;
+                    botton.position.x = bottonW / 2;
+                } else {
+                    background.position.x = -bkgndW / 2;
+                    top.position.x = -topW / 2;
+                    botton.position.x = -bottonW / 2;
+                }
+
+                stepsGroup.add(background);
+                stepsGroup.add(top);
+                stepsGroup.add(botton);
+                return stepsGroup;
+            }
+            const doorStepX = hoodW / 2;
+            const doorStepY = cabinY - cabinH / 2;
+            const doorStepZ = 1.85;
+            addPart("doorStepLeft", doorSteps(true));
+            truckParts.doorStepLeft.position.set(doorStepX, doorStepY, doorStepZ);
+            addPart("doorStepRight", doorSteps(false));
+            truckParts.doorStepRight.position.set(-doorStepX, doorStepY, doorStepZ);
+
+            const createAirFilter = (right) => {
+                const airFilterGroup = new THREE.Group();
+
+                const radius = 0.17;
+                const canisterH = 0.65;
+                const strapW = 0.01;
+                const strapH = 0.03
+
+                const canisterGeometry = new THREE.CylinderGeometry(radius, radius, canisterH, 64);
+                const canisterMesh = new THREE.Mesh(canisterGeometry, chromeMaterial);
+                canisterMesh.position.y = -canisterH / 2;
+                airFilterGroup.add(canisterMesh);
+
+                const topCapGeometry = new THREE.CylinderGeometry(radius + strapW, radius + strapW, strapH, 64);
+                const topCapMesh = new THREE.Mesh(topCapGeometry, rubberMaterial);
+                topCapMesh.position.y = -strapH / 2 - 0.01;
+                airFilterGroup.add(topCapMesh);
+
+                const bottomCapMesh = topCapMesh.clone();
+                bottomCapMesh.position.y = -canisterH + strapH / 2 + 0.01;
+                airFilterGroup.add(bottomCapMesh);
+
+                const middleStrap = topCapMesh.clone();
+                middleStrap.position.y = -canisterH / 2;
+                airFilterGroup.add(middleStrap);
+
+                const bottonStrap = topCapMesh.clone();
+                bottonStrap.position.y = -canisterH * 0.75;
+                airFilterGroup.add(bottonStrap);
+
+                const addimitionMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 64), chromeMaterial);
+                addimitionMesh.rotation.z = -Math.PI / 2;
+                addimitionMesh.rotation.y = Math.PI / 2;
+                addimitionMesh.position.y = -canisterH / 4;
+                addimitionMesh.position.z = radius;
+                airFilterGroup.add(addimitionMesh);
+
+                if (right) {
+                    airFilterGroup.rotation.y = Math.PI / 4;
+                    airFilterGroup.position.x = -radius;
+                } else {
+                    airFilterGroup.rotation.y = -Math.PI / 4;
+                    airFilterGroup.position.x = radius;
+                }
+                airFilterGroup.position.z = radius;
+                const airFilterGroup2 = new THREE.Group();
+                airFilterGroup2.add(airFilterGroup);
+                return airFilterGroup2;
+            }
+            const airFilterX = hoodW / 2;
+            const airFilterY = hoodY + hoodH / 2;
+            const airFilterZ = cabinZ + cabinL / 2;
+            addPart("airFilterRight", createAirFilter(true));
+            truckParts.airFilterRight.position.set(-airFilterX, airFilterY, airFilterZ);
+            addPart("airFilterLeft", createAirFilter(false));
+            truckParts.airFilterLeft.position.set(airFilterX, airFilterY, airFilterZ);
+
+
+            const fenderW = 0.58;
+            const fenderY = 1.3;
+            const fenderZ = bumperZ + bumperL / 2 - 0.76;
+            const createFenderAssembly = () => {
+                const fenderGroup = new THREE.Group();
+                const mainGroup = new THREE.Group();
+
+                const fenderShape = new THREE.Shape();
+                const outerRadius = 0.78;
+                const innerRadius = outerRadius - 0.20;
+                fenderShape.absarc(0, 0, outerRadius, -Math.PI * 0.39, Math.PI * 0.54, false);
+                fenderShape.absarc(0, 0, innerRadius, Math.PI * 0.55, -Math.PI * 0.35, true);
+
+                const extrudeSettings = { steps: 1, depth: fenderW, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.01, bevelOffset: 0, bevelSegments: 2 };
+                const fenderGeo = new THREE.ExtrudeGeometry(fenderShape, extrudeSettings);
+                const fender = new THREE.Mesh(fenderGeo, bodyMaterial);
+                fender.castShadow = true;
+                fender.receiveShadow = true;
+                fender.position.z = -extrudeSettings.depth / 2;
+                fender.rotation.y = -Math.PI / 2;
+                mainGroup.add(fender);
+                mainGroup.rotation.x = -Math.PI / 2;
+                fenderGroup.add(mainGroup);
+
+                return fenderGroup;
+            };
+            addPart("fenderRight", createFenderAssembly());
+            truckParts.fenderRight.position.set(-0.55, fenderY, fenderZ);
+            addPart("fenderLeft", createFenderAssembly());
+            truckParts.fenderLeft.position.set(1.15, fenderY, fenderZ);
+
+            const supportW = 0.48;
+            const supportH = 0.26;
+            const supportX = 0.78;
+            const supportY = 1.57;
+            const supportZ = fenderZ + 0.51;
+            const supportGeo = new RoundedBoxGeometry(supportW, supportH, 0.26, 4, 0.01);
+            addPart("ligtSupportRight", new THREE.Mesh(supportGeo, bodyMaterial));
+            truckParts.ligtSupportRight.position.set(-supportX, supportY, supportZ);
+            addPart("ligtSupportLeft", new THREE.Mesh(supportGeo, bodyMaterial));
+            truckParts.ligtSupportLeft.position.set(supportX, supportY, supportZ);
+
+            const createHeadLights = (housingW, housingH, boarders) => {
+                const lightW = (housingW - 3 * boarders) / 2;
+                const lightH = housingH - 2 * boarders;
+                const LightX = lightW / 2 + boarders / 2;
+                const LightZ = 0.05;
+
+                const headlightAssembly = new THREE.Group();
+                const housing = new THREE.Mesh(new THREE.BoxGeometry(housingW, housingH, 0.10), chromeMaterial);
+                headlightAssembly.add(housing);
+
+                const lightSquareGeo = new THREE.BoxGeometry(lightW, lightH, 0.03);
+                const leftLight = new THREE.Mesh(lightSquareGeo, lightMaterial);
+                leftLight.position.set(LightX, 0, LightZ);
+                headlightAssembly.add(leftLight);
+                const rightLightMesh = new THREE.Mesh(lightSquareGeo, lightMaterial);
+                rightLightMesh.position.set(-LightX, 0, LightZ);
+                headlightAssembly.add(rightLightMesh);
+                return headlightAssembly;
+            }
+
+            const headLightBoarder = 0.02;
+            const headLightW = 0.38;
+            const headLightH = 0.14;
+            const headLightX = supportX + supportW / 2 - headLightBoarder - headLightW / 2;
+            const headLightY = supportY + supportH / 2 - headLightBoarder - headLightH / 2;
+            const headLightZ = supportZ + 0.1;
+            addPart("headLightRight", createHeadLights(headLightW, headLightH, headLightBoarder));
+            truckParts.headLightRight.position.set(-headLightX, headLightY, headLightZ);
+            addPart("headLightLeft", createHeadLights(headLightW, headLightH, headLightBoarder));
+            truckParts.headLightLeft.position.set(headLightX, headLightY, headLightZ);
+
+            const createFifthWheel = () => {
+                const metalMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x4B4B4B, // Cinza escuro metálico
+                    metalness: 0.9,
+                    roughness: 0.4,
+                });
+
+                const fifthWheelGroup = new THREE.Group();
+
+                const plateShape = new THREE.Shape();
+                const outerRadius = 0.35;
+                const innerRadius = 0.10;
+                plateShape.absarc(0, 0, outerRadius, -Math.PI * 0.85, Math.PI * 0.85, false);
+                plateShape.absarc(0, 0, innerRadius, Math.PI * 0.67, -Math.PI * 0.67, true);
+
+                const extrudeSettings = {
+                    steps: 1,
+                    depth: 0.05, // Espessura do prato
+                    bevelEnabled: true,
+                    bevelThickness: 0.005,
+                    bevelSize: 0.05,
+                    bevelSegments: 2,
+                };
+
+                const plateGeometry = new THREE.ExtrudeGeometry(plateShape, extrudeSettings);
+                const mainPlate = new THREE.Mesh(plateGeometry, metalMaterial);
+                mainPlate.rotation.z = Math.PI / 2;
+                mainPlate.rotation.x = Math.PI / 2.2;
+
+                mainPlate.castShadow = true;
+                fifthWheelGroup.add(mainPlate);
+
+                const support = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.1, 0.1), metalMaterial);
+                support.position.y = -0.07;
+                support.position.z = 0.15;
+                fifthWheelGroup.add(support);
+
+                const base = new THREE.Mesh(new THREE.BoxGeometry(2 * outerRadius, 0.16, 2 * outerRadius), metalMaterial);
+                base.position.y = -0.07 - 0.13;
+                fifthWheelGroup.add(base);
+                return fifthWheelGroup;
+            }
+
+            addPart("fifthWheel", createFifthWheel());
+            const fifthWheelY = chassiY + chassiH / 2 + 0.27;
+            const fifthWheelZ = chassiL / 2 - 0.7 - 0.38;
+            truckParts.fifthWheel.position.set(0, fifthWheelY, -fifthWheelZ);
+
+            const frontAxleZ = fenderZ + 0.03;
+            const lastAxleZ = chassiL / 2 - 0.5 - 0.2;
+            const secondAxleZ = lastAxleZ - 2 * 0.5 - 0.1;
+            const wheelRPosX = -1.00;
+            const wheelLPosX = 1.00;
+            const wheelPosY = 1.00;
+
+            const wheels = {}
+            wheels.wheelFrontLeft = new TireWheelSet(false, true);
+            wheels.wheelFrontRight = new TireWheelSet(true, true);
+            wheels.wheelMidLeft = new TireWheelSet(false, false);
+            wheels.wheelMidRight = new TireWheelSet(true, false);
+            wheels.wheelLastLeft = new TireWheelSet(false, false);
+            wheels.wheelLastRight = new TireWheelSet(true, false);
+            addPart("wheelFrontLeft", wheels.wheelFrontLeft.Visual());
+            addPart("wheelFrontRight", wheels.wheelFrontRight.Visual());
+            addPart("wheelMidLeft", wheels.wheelMidLeft.Visual());
+            addPart("wheelMidRight", wheels.wheelMidRight.Visual());
+            addPart("wheelLastLeft", wheels.wheelLastLeft.Visual());
+            addPart("wheelLastRight", wheels.wheelLastRight.Visual());
+            truckParts.wheelFrontLeft.position.set(wheelLPosX, wheelPosY, frontAxleZ);
+            truckParts.wheelFrontRight.position.set(wheelRPosX, wheelPosY, frontAxleZ);
+            truckParts.wheelMidLeft.position.set(wheelLPosX, wheelPosY, -secondAxleZ);
+            truckParts.wheelMidRight.position.set(wheelRPosX, wheelPosY, -secondAxleZ);
+            truckParts.wheelLastLeft.position.set(wheelLPosX, wheelPosY, -lastAxleZ);
+            truckParts.wheelLastRight.position.set(wheelRPosX, wheelPosY, -lastAxleZ);
+        }
+
+        function createGrille(frameWidth, frameDepth, frameHeight, chromeMaterial) {
+            const createGrilleTexture = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 128;
+                canvas.height = 128;
+                const context = canvas.getContext('2d');
+
+                // Background of the grille mesh
+                context.fillStyle = '#111111';
+                context.fillRect(0, 0, 128, 128);
+
+                // Grille lines
+                context.strokeStyle = '#444444';
+                context.lineWidth = 2;
+
+                const step = 8;
+                for (let i = context.lineWidth / 2; i < 128; i += step) {
+                    context.beginPath();
+                    context.moveTo(i, 0);
+                    context.lineTo(i, 128);
+                    context.stroke();
+                }
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(10, 12); // Repeat texture for a denser look
+                return texture;
+            };
+
+            const grilleGroup = new THREE.Group();
+
+            const frameThickness = 0.05;
+            const topFrameThickness = 0.20;
+            const innerWidth = frameWidth - frameThickness;
+            const innerHeight = frameHeight;
+
+            const grilleTexture = createGrilleTexture();
+            const backgroundPlane = new THREE.Mesh(
+                new THREE.PlaneGeometry(innerWidth, innerHeight),
+                new THREE.MeshBasicMaterial({ map: grilleTexture })
+            );
+            backgroundPlane.position.z = 0.005;
+            grilleGroup.add(backgroundPlane);
+
+            // Outer Frame
+            const bottomFrame = new THREE.Mesh(new THREE.BoxGeometry(frameWidth, frameThickness, frameDepth), chromeMaterial);
+            bottomFrame.position.y = -frameHeight / 2 + frameThickness / 2;
+            grilleGroup.add(bottomFrame);
+
+            const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness, frameHeight, frameDepth), chromeMaterial);
+            leftFrame.position.x = -frameWidth / 2 + frameThickness / 2;
+            grilleGroup.add(leftFrame);
+
+            const rightFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThickness, frameHeight, frameDepth), chromeMaterial);
+            rightFrame.position.x = frameWidth / 2 - frameThickness / 2;
+            grilleGroup.add(rightFrame);
+
+            const topFrame = new THREE.Mesh(new THREE.BoxGeometry(frameWidth, topFrameThickness, frameDepth), chromeMaterial);
+            topFrame.position.y = frameHeight / 2 - topFrameThickness / 2;
+            grilleGroup.add(topFrame);
+
+            // Fewer vertical bars for depth
+            const barCount = 6; // Reduced from 20
+            const barWidth = 0.01;
+            const barSpacing = (innerWidth / 2) / (barCount + 1);
+
+            // Center Bar
+            const centerBar = new THREE.Mesh(new THREE.BoxGeometry(barWidth * 2, innerHeight, frameDepth * 0.8), chromeMaterial);
+            grilleGroup.add(centerBar);
+
+            // Left and Right Bars
+            for (let i = 1; i <= barCount; i++) {
+                const barGeometry = new THREE.BoxGeometry(barWidth, innerHeight, frameDepth * 0.8);
+
+                const rightBar = new THREE.Mesh(barGeometry, chromeMaterial);
+                rightBar.position.x = i * barSpacing;
+                grilleGroup.add(rightBar);
+
+                const leftBar = new THREE.Mesh(barGeometry, chromeMaterial);
+                leftBar.position.x = -i * barSpacing;
+                grilleGroup.add(leftBar);
+            }
+
+            return grilleGroup;
+        }
+
+        function createEmblem() {
+            const group = new THREE.Group();
+
+            // Materiais
+            const redMaterial = new THREE.MeshStandardMaterial({ color: 0xB40404, metalness: 0.3, roughness: 0.4 });
+            const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xEAEAEA, metalness: 0.3, roughness: 0.4 });
+
+            const emblemDepth = 0.01;
+            const redZ = 0.001;
+
+            // --- Parte Central (Círculo) ---
+            // Círculo vermelho de fundo
+            const redCircleGeom = new THREE.CylinderGeometry(0.05, 0.05, emblemDepth, 64);
+            const redCircle = new THREE.Mesh(redCircleGeom, redMaterial);
+            redCircle.rotation.x = Math.PI / 2;
+            redCircle.position.z = redZ;
+            group.add(redCircle);
+
+            // Anel branco sobre o círculo
+            const whiteRingShape = new THREE.Shape();
+            whiteRingShape.absarc(0, 0, 0.041, 0, Math.PI * 2, false);
+            const ringHole = new THREE.Path();
+            ringHole.absarc(0, 0, 0.038, 0, Math.PI * 2, true);
+            whiteRingShape.holes.push(ringHole);
+            const whiteRingGeom = new THREE.ExtrudeGeometry(whiteRingShape, { depth: emblemDepth, bevelEnabled: false });
+            const whiteRing = new THREE.Mesh(whiteRingGeom, whiteMaterial);
+            whiteRing.position.z = -emblemDepth / 2 + 2 * redZ;
+            group.add(whiteRing);
+
+            // --- Retângulo com listras ---
+            const lowerPartShape = new THREE.Shape();
+            const lowerWidth = 0.065;
+            const lowerHeight = 0.20;
+            lowerPartShape.moveTo(-lowerWidth / 2, 0);
+            lowerPartShape.lineTo(-lowerWidth / 2, -lowerHeight);
+            lowerPartShape.lineTo(lowerWidth / 2, -lowerHeight);
+            lowerPartShape.lineTo(lowerWidth / 2, 0);
+            lowerPartShape.lineTo(-lowerWidth / 2, 0);
+
+            const lowerPartGeom = new THREE.ExtrudeGeometry(lowerPartShape, { depth: emblemDepth, bevelEnabled: false });
+            const lowerPart = new THREE.Mesh(lowerPartGeom, whiteMaterial);
+            lowerPart.position.y = lowerHeight / 3;
+            lowerPart.position.z = -emblemDepth / 2;
+            group.add(lowerPart);
+
+            // Listras vermelhas 
+            const stripeWidth = 0.012;
+            const stripeH = lowerHeight - 0.002;
+            const stripeGeom = new THREE.BoxGeometry(stripeWidth, stripeH, emblemDepth);
+
+            const stripe1 = new THREE.Mesh(stripeGeom, redMaterial);
+            stripe1.position.set(0, lowerPart.position.y - lowerHeight / 2, redZ);
+            group.add(stripe1);
+
+            const stripe2 = stripe1.clone();
+            stripe2.position.x = -(stripeWidth + 0.009);
+            group.add(stripe2);
+
+            const stripe3 = stripe1.clone();
+            stripe3.position.x = stripeWidth + 0.009;
+            group.add(stripe3);
+            return group;
+        }
+
+        // --- CONTROLES INTERATIVOS E LÓGICA DE SELEÇÃO ---
+        function setupInteractiveControls() {
+            const partSelector = document.getElementById('partSelector');
+            const inputs = {
+                pos: { x: 'posX', y: 'posY', z: 'posZ' },
+                rot: { x: 'rotX', y: 'rotY', z: 'rotZ' },
+                size: { x: 'sizeX', y: 'sizeY', z: 'sizeZ' }
+            };
+            const resetButton = document.getElementById('resetButton');
+
+            partSelector.innerHTML = '';
+            for (const partName in truckParts) {
+                const option = document.createElement('option');
+                option.value = partName;
+                option.textContent = partName;
+                partSelector.appendChild(option);
+            }
+
+            const updateInputs = () => {
+                if (!selectedPart) return;
+                const original = originalTransforms.get(selectedPart);
+                if (!original) return;
+
+                Object.keys(inputs.pos).forEach(axis => {
+                    document.getElementById(inputs.pos[axis]).value = selectedPart.position[axis].toFixed(2);
+                });
+                Object.keys(inputs.rot).forEach(axis => {
+                    document.getElementById(inputs.rot[axis]).value = Math.round(THREE.MathUtils.radToDeg(selectedPart.rotation[axis]));
+                });
+                Object.keys(inputs.size).forEach(axis => {
+                    const currentSize = original.size[axis] * selectedPart.scale[axis];
+                    document.getElementById(inputs.size[axis]).value = currentSize.toFixed(2);
+                });
+            };
+
+            const addListener = (inputId, callback) => {
+                document.getElementById(inputId).addEventListener('input', callback);
+            };
+
+            Object.keys(inputs.pos).forEach(axis => addListener(inputs.pos[axis], (e) => {
+                if (selectedPart) selectedPart.position[axis] = parseFloat(e.target.value) || 0;
+            }));
+
+            Object.keys(inputs.rot).forEach(axis => addListener(inputs.rot[axis], (e) => {
+                if (selectedPart) selectedPart.rotation[axis] = THREE.MathUtils.degToRad(parseFloat(e.target.value) || 0);
+            }));
+
+            Object.keys(inputs.size).forEach(axis => addListener(inputs.size[axis], (e) => {
+                if (selectedPart) {
+                    const original = originalTransforms.get(selectedPart);
+                    if (original && original.size[axis] > 0) {
+                        const newSize = parseFloat(e.target.value) || 0;
+                        selectedPart.scale[axis] = newSize / original.size[axis];
+                    }
+                }
+            }));
+
+            partSelector.addEventListener('change', (e) => selectPartByName(e.target.value));
+
+            resetButton.addEventListener('click', () => {
+                if (selectedPart) {
+                    const original = originalTransforms.get(selectedPart);
+                    if (original) {
+                        selectedPart.position.copy(original.position);
+                        selectedPart.rotation.copy(original.rotation);
+                        selectedPart.scale.copy(original.scale);
+                        updateInputs();
+                    }
+                }
+            });
+
+            if (Object.keys(truckParts).length > 0) {
+                selectPartByName(Object.keys(truckParts)[0]);
+            }
+        }
+
+        function selectPartByName(name) {
+            selectedPart = truckParts[name] || null;
+            if (partSelector.value !== name) {
+                partSelector.value = name;
+            }
+            updateOutline();
+            if (selectedPart) {
+                const inputs = {
+                    pos: { x: 'posX', y: 'posY', z: 'posZ' },
+                    rot: { x: 'rotX', y: 'rotY', z: 'rotZ' },
+                    size: { x: 'sizeX', y: 'sizeY', z: 'sizeZ' }
+                };
+                const original = originalTransforms.get(selectedPart);
+                if (!original) return;
+
+                Object.keys(inputs.pos).forEach(axis => {
+                    document.getElementById(inputs.pos[axis]).value = selectedPart.position[axis].toFixed(2);
+                });
+                Object.keys(inputs.rot).forEach(axis => {
+                    document.getElementById(inputs.rot[axis]).value = Math.round(THREE.MathUtils.radToDeg(selectedPart.rotation[axis]));
+                });
+                Object.keys(inputs.size).forEach(axis => {
+                    const currentSize = original.size[axis] * selectedPart.scale[axis];
+                    document.getElementById(inputs.size[axis]).value = currentSize.toFixed(2);
+                });
+            }
+        }
+
+        function onDocumentMouseClick(event) {
+            if (event.target.closest('#controls')) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(Object.values(truckParts), true);
+
+            if (intersects.length > 0) {
+                let object = intersects[0].object;
+                while (object.parent && !truckParts[object.name]) {
+                    object = object.parent;
+                }
+                if (truckParts[object.name]) {
+                    selectPartByName(object.name);
+                }
+            }
+        }
+
+        function updateOutline() {
+            if (outlineHelper) {
+                scene.remove(outlineHelper);
+                outlineHelper.dispose();
+            }
+            if (selectedPart) {
+                outlineHelper = new THREE.BoxHelper(selectedPart, 0xffff00);
+                scene.add(outlineHelper);
+            }
+        }
+
+        function makePanelDraggable() {
+            const panel = document.getElementById('controls');
+            const header = panel.querySelector('h3');
+            let isDragging = false;
+            let offsetX, offsetY;
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                offsetX = e.clientX - panel.offsetLeft;
+                offsetY = e.clientY - panel.offsetTop;
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+            function onMouseMove(e) {
+                if (!isDragging) return;
+                panel.style.left = `${e.clientX - offsetX}px`;
+                panel.style.top = `${e.clientY - offsetY}px`;
+            }
+            function onMouseUp() {
+                isDragging = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            if (outlineHelper) {
+                outlineHelper.update();
+            }
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

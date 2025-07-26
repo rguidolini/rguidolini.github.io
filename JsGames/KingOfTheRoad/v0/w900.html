@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="pt-br">
+ <head>
+   <meta charset="UTF-8" />
+   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+   <title>Rei da Estrada: Teste de Baliza</title>
+   <script src="https://cdn.tailwindcss.com"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+   <style>
+     body {
+       margin: 0;
+       overflow: hidden;
+       background-color: #333;
+       font-family: "Inter", sans-serif;
+       cursor: grab;
+     }
+     body:active {
+       cursor: grabbing;
+     }
+     #info-panel {
+       position: absolute;
+       top: 20px;
+       left: 50%;
+       transform: translateX(-50%);
+       background-color: rgba(0, 0, 0, 0.7);
+       color: white;
+       padding: 15px 25px;
+       border-radius: 12px;
+       border: 1px solid rgba(255, 255, 255, 0.2);
+       text-align: center;
+       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+       transition: all 0.3s ease;
+       pointer-events: none;
+     }
+     #message-box {
+       position: absolute;
+       top: 50%;
+       left: 50%;
+       transform: translate(-50%, -50%);
+       background-color: rgba(26, 188, 156, 0.9);
+       color: white;
+       padding: 30px;
+       border-radius: 15px;
+       font-size: 2rem;
+       font-weight: bold;
+       display: none;
+       text-align: center;
+       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+       max-width: 90%;
+       width: 500px;
+     }
+     #message-box.fail {
+       background-color: rgba(231, 76, 60, 0.9);
+     }
+     #controls {
+       position: absolute;
+       bottom: 20px;
+       right: 20px;
+       background-color: rgba(0, 0, 0, 0.7);
+       padding: 10px;
+       border-radius: 10px;
+       color: #eee;
+       pointer-events: none;
+     }
+     #restart-button {
+       cursor: pointer;
+       font-size: 1.1rem;
+       margin-top: 10px;
+       background-color: #4a5d45;
+       padding: 8px 16px;
+       border-radius: 5px;
+     }
+     #mouse-controls-info {
+       position: absolute;
+       bottom: 20px;
+       left: 20px;
+       background-color: rgba(0, 0, 0, 0.7);
+       padding: 10px;
+       border-radius: 10px;
+       color: #eee;
+       pointer-events: none;
+     }
+     #parking-brake-indicator {
+       position: absolute;
+       bottom: 20px;
+       left: 50%;
+       transform: translateX(-50%);
+       background-color: rgba(200, 0, 0, 0.85);
+       color: white;
+       padding: 8px 20px;
+       border-radius: 10px;
+       font-weight: bold;
+       font-size: 1.1rem;
+       display: none; /* Escondido por defeito */
+       border: 1px solid rgba(255, 255, 255, 0.4);
+       text-shadow: 0 0 5px black;
+     }
+     #gemini-feedback-button {
+       background-color: #3498db;
+       color: white;
+       padding: 10px 20px;
+       border: none;
+       border-radius: 8px;
+       font-size: 1rem;
+       font-weight: bold;
+       margin-top: 20px;
+       cursor: pointer;
+       transition: background-color 0.3s;
+     }
+     #gemini-feedback-button:hover {
+       background-color: #2980b9;
+     }
+     #gemini-feedback-button:disabled {
+       background-color: #95a5a6;
+       cursor: not-allowed;
+     }
+     #feedback-display {
+       font-size: 1rem;
+       font-weight: normal;
+       margin-top: 15px;
+       padding: 10px;
+       background-color: rgba(0, 0, 0, 0.2);
+       border-radius: 8px;
+       min-height: 50px;
+       text-align: left;
+     }
+     #speedometer {
+       position: absolute;
+       bottom: 125px; /* Posição acima dos outros controlos */
+       left: 20px;
+       background-color: rgba(0, 0, 0, 0.75);
+       color: white;
+       padding: 12px 20px;
+       border-radius: 12px;
+       font-size: 1.8rem;
+       font-weight: bold;
+       font-family: 'Courier New', Courier, monospace;
+       text-shadow: 2px 2px 4px black;
+       border: 1px solid rgba(255, 255, 255, 0.2);
+       min-width: 150px;
+       text-align: center;
+     }
+   </style>
+   <link rel="preconnect" href="https://fonts.googleapis.com" />
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+   <link
+     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+     rel="stylesheet"
+   />
+ </head>
+ <body>
+   <div id="info-panel">
+     <h1 class="text-xl font-bold mb-1">Autoescola - Teste de Baliza (Categoria C)</h1>
+     <p class="text-sm">Estacione o caminhão na área demarcada em amarelo.</p>
+   </div>
+
+
+   <div id="message-box">
+     <p id="message-text"></p>
+     <button id="gemini-feedback-button">Pedir Feedback do Instrutor ✨</button>
+     <div id="feedback-display" style="display: none"></div>
+     <button id="restart-button" class="mt-4 text-lg font-normal">Tentar Novamente</button>
+   </div>
+
+
+   <div id="controls" class="text-sm">
+     <p><span class="font-bold">↑</span> Acelerar</p>
+     <p><span class="font-bold">↓</span> Frear/Ré</p>
+     <p><span class="font-bold">←</span> Virar à Esquerda</p>
+     <p><span class="font-bold">→</span> Virar à Direita</p>
+   </div>
+
+
+   <div id="mouse-controls-info" class="text-sm">
+     <p><span class="font-bold">Mouse:</span> Clicar e arrastar para girar a câmera</p>
+     <p><span class="font-bold">Scroll:</span> Zoom</p>
+     <p><span class="font-bold">R:</span> Resetar Câmera</p>
+     <p><span class="font-bold">Espaço:</span> Freio de Mão</p>
+   </div>
+
+
+   <div id="speedometer">0 km/h</div>
+
+
+   <div id="parking-brake-indicator">(P)</div>
+
+
+   <script>
+     // --- ESCOPO GLOBAL E VARIÁVEIS DE ESTADO ---
+     let scene, camera, renderer, world, clock;
+     let vehicle,
+       chassisMesh,
+       wheelMeshes = [];
+    
+     const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+     let isMouseDown = false,
+       lastMouseX = null,
+       lastMouseY = null;
+     let cameraTheta = Math.PI / 2,
+       cameraPhi = Math.PI / 3,
+       cameraRadius = 18;
+
+
+     let gameEnded = false,
+       hasEnteredZone = false;
+     let testResult = { passed: false, reason: "" };
+     let parkingBrakeOn = false;
+
+
+     /**
+      * Função principal que inicializa e orquestra a criação do jogo.
+      */
+     function init() {
+       setupSceneAndPhysics();
+       createEnvironment();
+       createVehicle();
+       setupControls();
+       switchParkingBreak(); // Começa com o freio de mão ativado
+       animate();
+     }
+
+
+     /**
+      * Configura a cena 3D (Three.js) e o mundo da física (Cannon.js).
+      */
+     function setupSceneAndPhysics() {
+       // Cena e Renderer
+       scene = new THREE.Scene();
+       scene.background = new THREE.Color(0x87ceeb);
+       renderer = new THREE.WebGLRenderer({ antialias: true });
+       renderer.setSize(window.innerWidth, window.innerHeight);
+       renderer.shadowMap.enabled = true;
+       document.body.appendChild(renderer.domElement);
+
+
+       // Câmera
+       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+
+       // Luzes
+       scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+       const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+       dirLight.position.set(20, 30, 20);
+       dirLight.castShadow = true;
+       dirLight.shadow.camera.top = 20;
+       dirLight.shadow.camera.bottom = -20;
+       dirLight.shadow.camera.left = -20;
+       dirLight.shadow.camera.right = 20;
+       scene.add(dirLight);
+
+
+       // Física
+       world = new CANNON.World();
+       world.gravity.set(0, -9.82, 0);
+       world.broadphase = new CANNON.SAPBroadphase(world);
+       world.solver.iterations = 10;
+       world.defaultContactMaterial.friction = 0; // Atrito padrão global
+
+
+       // Clock
+       clock = new THREE.Clock();
+     }
+
+
+     /**
+      * Cria os elementos do cenário: chão, vaga e cones.
+      */
+     function createEnvironment() {
+       createGround(scene, world);
+       createParkingZone(scene);
+
+
+       // Posições dos cones
+       [
+         { x: -1.75, z: -4 },
+         { x: 1.75, z: -4 },
+         { x: -1.75, z: 4 },
+         { x: 1.75, z: 4 },
+       ].forEach((pos) => createCone(pos.x, pos.z, scene, world));
+     }
+
+
+     /**
+      * Cria o chão visual e físico.
+      */
+     function createGround(scene, world) {
+       const groundGeometry = new THREE.PlaneGeometry(100, 100);
+       const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x909090 });
+       const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+       groundMesh.rotation.x = -Math.PI / 2;
+       groundMesh.receiveShadow = true;
+       scene.add(groundMesh);
+
+
+       const groundShape = new CANNON.Box(new CANNON.Vec3(50, 0.1, 50));
+       const groundBody = new CANNON.Body({
+         mass: 0,
+         shape: groundShape,
+       });
+       groundBody.position.y = -0.1;
+       world.addBody(groundBody);
+     }
+
+
+     /**
+      * Cria a área de estacionamento amarela.
+      */
+     function createParkingZone(scene) {
+       const parkingZoneGeometry = new THREE.PlaneGeometry(3.5, 8);
+       const parkingZoneMaterial = new THREE.MeshBasicMaterial({
+         color: 0xffd700,
+         transparent: true,
+         opacity: 0.4,
+         side: THREE.DoubleSide,
+       });
+       const parkingZoneMesh = new THREE.Mesh(parkingZoneGeometry, parkingZoneMaterial);
+       parkingZoneMesh.position.set(0, 0.01, 0);
+       parkingZoneMesh.rotation.x = -Math.PI / 2;
+       scene.add(parkingZoneMesh);
+     }
+
+
+     /**
+      * Cria um cone individual.
+      */
+     function createCone(x, z, scene, world) {
+       const coneHeight = 0.8,
+         coneRadius = 0.3;
+       const coneMesh = new THREE.Mesh(
+         new THREE.ConeGeometry(coneRadius, coneHeight, 16),
+         new THREE.MeshStandardMaterial({ color: 0xff4500 }),
+       );
+       coneMesh.position.set(x, coneHeight / 2, z);
+       coneMesh.castShadow = true;
+       scene.add(coneMesh);
+
+
+       const coneBody = new CANNON.Body({
+         mass: 1,
+         shape: new CANNON.Cylinder(coneRadius, coneRadius, coneHeight, 16),
+       });
+       coneBody.position.copy(coneMesh.position);
+       world.addBody(coneBody);
+       coneBody.addEventListener("collide", (event) => {
+         if (event.body === vehicle.chassisBody) {
+           endTest(false, "Você bateu em um cone.");
+         }
+       });
+     }
+
+
+     /**
+      * Monta o veículo, incluindo sua física e modelo visual.
+      */
+     function createVehicle() {
+       // 1. Física do Veículo
+       const chassisShape = new CANNON.Box(new CANNON.Vec3(1.2, 0.5, 3));
+       const chassisBody = new CANNON.Body({ mass: 1500 });
+       chassisBody.addShape(chassisShape);
+       chassisBody.position.set(0, 4, -10);
+       chassisBody.angularDamping = 0.5;
+
+
+       vehicle = new CANNON.RaycastVehicle({
+         chassisBody: chassisBody,
+         indexRightAxis: 0,
+         indexUpAxis: 1,
+         indexForwardAxis: 2,
+       });
+
+
+       // 2. Física das Rodas
+       const wheelOptions = {
+         radius: 0.5,
+         chassisConnectionPointLocal: new CANNON.Vec3(),
+         axleLocal: new CANNON.Vec3(-1, 0, 0),
+         directionLocal: new CANNON.Vec3(0, -1, 0),
+         suspensionStiffness: 40,
+         suspensionRestLength: 0.4,
+         dampingRelaxation: 2.3,
+         dampingCompression: 3.3,
+         maxSuspensionForce: 100000,
+         rollInfluence: 0.01,
+         frictionSlip: 80,
+         // customSlidingRotationalSpeed: -30,
+         // useCustomSlidingRotationalSpeed: true,
+       };
+       [
+         { x: 1, z: 2.8 }, { x: -1, z: 2.8 }, { x: 1, z: -2.5},
+         { x: -1, z: -2.5 }, { x: 1, z: -3.8 }, { x: -1, z: -3.8 },
+       ].forEach((pos) => {
+         wheelOptions.chassisConnectionPointLocal.set(pos.x, 0, pos.z);
+         vehicle.addWheel(wheelOptions);
+       });
+       vehicle.addToWorld(world);
+
+
+       // 3. Modelo Visual do Chassi
+       chassisMesh = new THREE.Group();
+       const truckModel = createTruckModel();
+       chassisMesh.add(truckModel);
+       scene.add(chassisMesh);
+
+
+       // 4. Modelos Visuais das Rodas
+       const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+       const wheelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 32);
+       wheelGeometry.rotateZ(Math.PI / 2); // Alinha o cilindro com o eixo X
+
+
+       // Material e geometria para os parafusos
+       const nutMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.5, roughness: 0.5 });
+       const nutGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.08, 6);
+       nutGeometry.rotateX(Math.PI / 2); // Alinha o parafuso para apontar para fora
+
+
+       vehicle.wheelInfos.forEach(() => {
+         const wheelGroup = new THREE.Group();
+
+
+         // Cria a parte principal da roda
+         const mainWheelMesh = new THREE.Mesh(wheelGeometry, wheelMaterial);
+         mainWheelMesh.castShadow = true;
+         wheelGroup.add(mainWheelMesh);
+
+
+         // Adiciona os parafusos
+         const numNuts = 8;
+         const nutCircleRadius = 0.2;
+         for (let i = 0; i < numNuts; i++) {
+           const angle = (i / numNuts) * Math.PI * 2;
+           const nut = new THREE.Mesh(nutGeometry, nutMaterial);
+
+
+           // Posiciona os parafusos em um círculo na face externa da roda
+           nut.position.set(
+             0.21, // Ligeiramente para fora da superfície da roda (largura/2 + um pouco)
+             nutCircleRadius * Math.cos(angle),
+             nutCircleRadius * Math.sin(angle)
+           );
+           wheelGroup.add(nut);
+         }
+
+
+         scene.add(wheelGroup);
+         wheelMeshes.push(wheelGroup); // Adiciona o grupo ao invés do mesh
+       });
+     }
+
+
+     /**
+      * Cria o modelo 3D do caminhão (sem física).
+      */
+     function createTruckModel() {
+       const group = new THREE.Group();
+       const darkRed = new THREE.MeshStandardMaterial({ color: 0x8b0000, metalness: 0.1, roughness: 0.7 });
+       const chrome = new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.2 });
+       const glass = new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.4 });
+       // *** NOVO: Material para o chassi e eixos ***
+       const chassisPartMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.6 });
+
+
+       // --- PARTES ORIGINAIS DO MODELO ---
+       const cab = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.2, 2.4), darkRed);
+       cab.position.set(0, 1.2, -0.2); cab.castShadow = true; group.add(cab);
+       const hood = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.3, 3), darkRed);
+       hood.position.set(0, 0.75, 2.2); hood.castShadow = true; group.add(hood);
+       const grilleMesh = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.4, 0.1), chrome);
+       grilleMesh.position.set(0, 0.8, 3.7); group.add(grilleMesh);
+       const bumperMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 0.2), chrome);
+       bumperMesh.position.set(0, 0.15, 3.8); group.add(bumperMesh);
+       const windshieldMesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 0.1), glass);
+       windshieldMesh.position.set(0, 1.6, 0.95); group.add(windshieldMesh);
+       [-1.3, 1.3].forEach((x) => {
+         const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 3.5, 12), chrome);
+         exhaust.position.set(x, 1.85, -1.5); exhaust.castShadow = true; group.add(exhaust);
+       });
+       // [-1.4, 1.4].forEach((x) => {
+       //   const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 3, 16), chrome);
+       //   tank.rotation.x = Math.PI / 2; tank.position.set(x, 0.4, -0.5); group.add(tank);
+       // });
+
+
+       // --- NOVO: Estrutura do Chassi e Eixos ---
+       // 1. Longarinas (vigas principais do chassi)
+       const railGeom = new THREE.BoxGeometry(0.15, 0.3, 7.5);
+       const leftRail = new THREE.Mesh(railGeom, chassisPartMaterial);
+       leftRail.position.set(-0.7, 0.2, -0.5);
+       group.add(leftRail);
+
+
+       const rightRail = new THREE.Mesh(railGeom, chassisPartMaterial);
+       rightRail.position.set(0.7, 0.2, -0.5);
+       group.add(rightRail);
+
+
+       // 2. Travessa (viga que liga as longarinas no final)
+       const crossMemberGeom = new THREE.BoxGeometry(1.55, 0.3, 0.2);
+       const crossMember = new THREE.Mesh(crossMemberGeom, chassisPartMaterial);
+       crossMember.position.set(0, 0.2, -4.15);
+       group.add(crossMember);
+
+
+       // 3. Eixos traseiros
+       const axleGeom = new THREE.CylinderGeometry(0.1, 0.1, 2.2, 8);
+       const rearAxle1 = new THREE.Mesh(axleGeom, chassisPartMaterial);
+       rearAxle1.rotation.z = Math.PI / 2; // Gira o cilindro para ficar na horizontal
+       rearAxle1.position.set(0, -0.3, -2.5);
+       group.add(rearAxle1);
+
+
+       const rearAxle2 = new THREE.Mesh(axleGeom, chassisPartMaterial);
+       rearAxle2.rotation.z = Math.PI / 2;
+       rearAxle2.position.set(0, -0.25, -3.8);
+       group.add(rearAxle2);
+      
+       return group;
+     }
+
+
+     /**
+      * Configura todos os listeners de eventos para controlo.
+      */
+     function setupControls() {
+       document.addEventListener("keydown", (e) => {
+         if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+         if (e.key.toLowerCase() === "r") { cameraTheta = Math.PI; cameraPhi = Math.PI / 6; }
+         if (e.key === " ") { e.preventDefault(); switchParkingBreak(); }
+       });
+       document.addEventListener("keyup", (e) => {
+         if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+       });
+       document.addEventListener("mousedown", (e) => {
+         isMouseDown = true; lastMouseX = e.clientX; lastMouseY = e.clientY;
+       });
+       document.addEventListener("mouseup", () => (isMouseDown = false));
+       document.addEventListener("mousemove", (e) => {
+         if (!isMouseDown) return;
+         cameraTheta -= (e.clientX - lastMouseX) * 0.005;
+         cameraPhi -= (e.clientY - lastMouseY) * 0.005;
+         cameraPhi = Math.max(0.1, Math.min(Math.PI / 2.2, cameraPhi));
+         lastMouseX = e.clientX; lastMouseY = e.clientY;
+       });
+       document.addEventListener("wheel", (e) => {
+         cameraRadius += e.deltaY * 0.02; cameraRadius = Math.max(8, Math.min(40, cameraRadius));
+       });
+       document.getElementById("restart-button").addEventListener("click", () => location.reload());
+       document.getElementById("gemini-feedback-button").addEventListener("click", getGeminiFeedback);
+     }
+
+
+     /**
+      * Lida com a movimentação do veículo baseada nas teclas pressionadas.
+      */
+     function handleVehicleControls() {
+       const maxSteerVal = 0.6;
+       const maxForce = 2000;
+       const activeBrakeForce = 35;
+       let force = 0;
+       let steer = 0;
+
+
+       if (parkingBrakeOn) return;
+
+
+       // Direção
+       if (keys.ArrowLeft) steer = maxSteerVal;
+       else if (keys.ArrowRight) steer = -maxSteerVal;
+       vehicle.setSteeringValue(steer, 0);
+       vehicle.setSteeringValue(steer, 1);
+
+
+       // Aceleração e Frenagem
+       for (let i = 0; i < 6; i++) vehicle.setBrake(0, i);
+
+
+       if (keys.ArrowUp) {
+           force = -maxForce;
+       } else if (keys.ArrowDown) {
+           const forwardSpeed = vehicle.chassisBody.velocity.dot(vehicle.chassisBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, 1)));
+           if (forwardSpeed > 0.1) {
+               for (let i = 0; i < 6; i++) vehicle.setBrake(activeBrakeForce, i);
+           } else {
+               force = maxForce;
+           }
+       }
+      
+       // Aplicar a Força do Motor
+       for (let i = 2; i < 6; i++) {
+         vehicle.applyEngineForce(force, i);
+       }
+     }
+
+
+     /**
+      * Verifica as condições de vitória ou derrota.
+      */
+     function checkWinLossConditions() {
+       if (gameEnded) return;
+       const pos = vehicle.chassisBody.position;
+       const quat = vehicle.chassisBody.quaternion;
+       const speed = vehicle.chassisBody.velocity.length();
+       const angleY = 2 * Math.atan2(quat.y, quat.w);
+       const isInParkingZone = Math.abs(pos.x) < 1.75 && Math.abs(pos.z) < 4;
+
+
+       if (isInParkingZone && !hasEnteredZone) { hasEnteredZone = true; }
+
+
+       if (hasEnteredZone && speed < 0.1 && parkingBrakeOn) {
+         if (Math.abs(angleY) < 0.2 && isInParkingZone) {
+           endTest(true, "Estacionado com sucesso.");
+         } else {
+           endTest(false, "Você estacionou, mas o caminhão não está direito ou está fora da vaga.");
+         }
+       }
+     }
+    
+     /**
+      * Atualiza a posição da câmera para seguir o caminhão.
+      */
+     function updateCameraPosition() {
+       const truckPosition = chassisMesh.position;
+       const cameraTargetPosition = new THREE.Vector3(
+         truckPosition.x + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta),
+         truckPosition.y + (cameraRadius * Math.cos(cameraPhi)) / 2,
+         truckPosition.z + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta),
+       );
+       camera.position.lerp(cameraTargetPosition, 0.15);
+       camera.lookAt(truckPosition);
+     }
+    
+     /**
+      * Atualiza o velocímetro na interface.
+      */
+     function updateSpeedometer() {
+       const speed = vehicle.chassisBody.velocity.length();
+       const speedKmh = Math.floor(speed * 3.6);
+       document.getElementById('speedometer').innerText = `${speedKmh} km/h`;
+     }
+
+
+     /**
+      * Ativa ou desativa o freio de mão.
+      */
+     function switchParkingBreak() {
+       parkingBrakeOn = !parkingBrakeOn;
+       document.getElementById("parking-brake-indicator").style.display = parkingBrakeOn ? "block" : "none";
+
+
+       if(parkingBrakeOn){
+           const parkingBrakeForce = 20;
+           for (let i = 0; i < 6; i++) vehicle.setBrake(parkingBrakeForce, i);
+           for (let i = 2; i < 6; i++) vehicle.applyEngineForce(0, i);
+       } else {
+           for (let i = 0; i < 6; i++) vehicle.setBrake(0, i);
+       }
+      
+       checkWinLossConditions();
+     }
+
+
+     /**
+      * Finaliza o teste, mostrando a mensagem e congelando o caminhão.
+      */
+     function endTest(passed, reason) {
+       if (gameEnded) return;
+       gameEnded = true;
+       testResult = { passed, reason };
+      
+       const msgBox = document.getElementById("message-box");
+       document.getElementById("message-text").innerText = passed ? "Aprovado!" : "Reprovado!";
+       msgBox.classList.toggle("fail", !passed);
+       msgBox.style.display = "block";
+       document.getElementById("gemini-feedback-button").disabled = false;
+       document.getElementById("feedback-display").style.display = "none";
+       document.getElementById("feedback-display").innerHTML = "";
+     }
+
+
+     /**
+      * Solicita e exibe o feedback da API Gemini.
+      */
+     async function getGeminiFeedback() {
+       const feedbackButton = document.getElementById("gemini-feedback-button");
+       const feedbackDisplay = document.getElementById("feedback-display");
+       feedbackButton.disabled = true;
+       feedbackDisplay.style.display = "block";
+       feedbackDisplay.innerHTML = "Gerando feedback do instrutor...";
+
+
+       const { passed, reason } = testResult;
+       const prompt = `Você é um instrutor de autoescola de caminhões no Brasil, seu nome é Jorge. Um aluno acabou de fazer o teste de baliza. O resultado foi: ${passed ? "APROVADO" : "REPROVADO"}. ${!passed ? `O motivo da reprovação foi: "${reason}"` : "Ele estacionou perfeitamente."} Escreva um feedback curto (2 ou 3 frases) para o aluno em português do Brasil. Seja direto, um pouco ríspido como um instrutor veterano, mas justo e encorajador no final.`;
+
+
+       let chatHistory = [];
+       chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+       const payload = { contents: chatHistory };
+       const apiKey = ""
+       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+
+       try {
+         const response = await fetch(apiUrl, {
+           method: "POST",
+           headers: { "Content-Type": "application/json" },
+           body: JSON.stringify(payload),
+         });
+         const result = await response.json();
+
+
+         if (result.candidates && result.candidates[0]?.content?.parts[0]) {
+           feedbackDisplay.innerText = result.candidates[0].content.parts[0].text;
+         } else {
+           feedbackDisplay.innerText = "Não foi possível obter o feedback. Tente novamente.";
+           console.error("Gemini API Error:", result);
+         }
+       } catch (error) {
+         feedbackDisplay.innerText = "Erro de conexão ao tentar obter feedback.";
+         console.error("Fetch Error:", error);
+       }
+     }
+
+
+     /**
+      * O loop principal de animação e lógica do jogo.
+      */
+     function animate() {
+       if (!document.body.contains(renderer.domElement)) return;
+       requestAnimationFrame(animate);
+
+
+       const deltaTime = clock.getDelta();
+       world.step(1 / 60, deltaTime);
+
+
+       chassisMesh.position.copy(vehicle.chassisBody.position);
+       chassisMesh.quaternion.copy(vehicle.chassisBody.quaternion);
+       for (let i = 0; i < wheelMeshes.length; i++) {
+         vehicle.updateWheelTransform(i);
+         wheelMeshes[i].position.copy(vehicle.wheelInfos[i].worldTransform.position);
+         wheelMeshes[i].quaternion.copy(vehicle.wheelInfos[i].worldTransform.quaternion);
+       }
+
+
+       if (!gameEnded) {
+         handleVehicleControls();
+         checkWinLossConditions();
+       }
+      
+       updateSpeedometer();
+       updateCameraPosition();
+       renderer.render(scene, camera);
+     }
+
+
+     // --- INICIAR JOGO ---
+     window.addEventListener("resize", () => {
+       camera.aspect = window.innerWidth / window.innerHeight;
+       camera.updateProjectionMatrix();
+       renderer.setSize(window.innerWidth, window.innerHeight);
+     });
+
+
+     window.onload = init;
+   </script>
+ </body>
+</html>
