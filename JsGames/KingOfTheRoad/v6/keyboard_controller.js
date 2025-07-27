@@ -3,8 +3,8 @@ export class KeyboardController {
         this.keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
         this.brakeDirection = 0;
         this.parkingBrakeOn = false;
+        this.currentSteerValue = 0;
     }
-
 
     HandleKeyDown(e) {
         if (this.keys.hasOwnProperty(e.key)) {
@@ -16,7 +16,6 @@ export class KeyboardController {
         }
     }
 
-
     HandleKeyUp(e) {
         if (this.keys.hasOwnProperty(e.key)) {
             this.keys[e.key] = false;
@@ -26,15 +25,34 @@ export class KeyboardController {
         }
     }
 
-
     /**
      * Controls steering wheel based on keyboard input.
      * Returns a percentage of the steering wheel to be turned. -1 for left, 1 for right.
      */
-    getSteering() {
-        if (this.keys.ArrowLeft) return -1;
-        if (this.keys.ArrowRight) return 1;
-        return 0;
+    getSteering(deltaTime) {
+        // --- LÓGICA DE DIREÇÃO GRADUAL BASEADA NO TEMPO ---
+        const maxSteerVal = 1;
+        const steerTime = 1; // Tempo em segundos para atingir o ângulo máximo
+        const returnTime = steerTime / 2.0; // Tempo de retorno (o dobro da velocidade)
+        const steerSpeed = maxSteerVal / steerTime;
+        const returnSpeed = maxSteerVal / returnTime;
+
+        if (this.keys.ArrowRight) {
+            this.currentSteerValue += steerSpeed * deltaTime;
+            if (this.currentSteerValue > maxSteerVal) this.currentSteerValue = maxSteerVal;
+        } else if (this.keys.ArrowLeft) {
+            this.currentSteerValue -= steerSpeed * deltaTime;
+            if (this.currentSteerValue < -maxSteerVal) this.currentSteerValue = -maxSteerVal;
+        } else {
+            if (this.currentSteerValue > 0) {
+                this.currentSteerValue -= returnSpeed * deltaTime;
+                if (this.currentSteerValue < 0) this.currentSteerValue = 0;
+            } else if (this.currentSteerValue < 0) {
+                this.currentSteerValue += returnSpeed * deltaTime;
+                if (this.currentSteerValue > 0) this.currentSteerValue = 0;
+            }
+        }
+        return this.currentSteerValue;
     }
 
 

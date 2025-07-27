@@ -61,7 +61,7 @@ export class KenworthW900 {
     }
 
     setSteering(value) {
-        const maxSteerVal = -0.6;  // Negative because the vehicle was created on the wrong axis
+        const maxSteerVal = -1;  // Negative because the vehicle was created on the wrong axis
         this.vehicle.setSteeringValue(value * maxSteerVal, 0);
         this.vehicle.setSteeringValue(value * maxSteerVal, 1);
     }

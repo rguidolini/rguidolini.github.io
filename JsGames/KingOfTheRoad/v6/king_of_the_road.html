@@ -263,7 +263,7 @@
       }
     }
 
-    const logger = new Log(1);
+    const logger = new Log(8);
     const clock = new THREE.Clock();
     const scenario = new Scenario();
     const w900 = new KenworthW900();
@@ -387,8 +387,8 @@
     /**
      * Lida com a movimentação do veículo baseada nas teclas pressionadas.
      */
-    function handleVehicleControls() {
-      w900.setSteering(keyboardController.getSteering());
+    function handleVehicleControls(deltaTime) {
+      w900.setSteering(keyboardController.getSteering(deltaTime));
       w900.setParkingBrake(keyboardController.parkingBrakeOn);
       const isMoving = w900.isMoving();
       w900.Brake(keyboardController.getBrake(isMoving));
@@ -404,14 +404,14 @@
      * O loop principal de animação e lógica do jogo.
      */
     function animate() {
+      const deltaTime = clock.getDelta();
       if (!level_manager.Ended()) {
-        handleVehicleControls();
+        handleVehicleControls(deltaTime);
         level_manager.checkSuccess();
       }
 
       requestAnimationFrame(animate);
 
-      const deltaTime = clock.getDelta();
       world.step(1 / 60, deltaTime);
 
       cannonDebugger.update();
