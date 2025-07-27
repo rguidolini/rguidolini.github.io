@@ -34,23 +34,23 @@ export function KenworthW900Visual() {
     truckParts.Parachoque.position.set(0, 1.05, bumperZ);
 
     const grillY = 1.86;
-            const grillL = 0.05;
-            const grillH = 1.13;
-            const grillZ = bumperZ + bumperL / 2 - grillL / 2;
-            addPart("Grade", createGrille(grillH, 0.05, grillH, chromeMaterial));
-            truckParts.Grade.position.set(0, grillY, grillZ);
+    const grillL = 0.05;
+    const grillH = 1.13;
+    const grillZ = bumperZ + bumperL / 2 - grillL / 2;
+    addPart("Grade", createGrille(grillH, 0.05, grillH, chromeMaterial));
+    truckParts.Grade.position.set(0, grillY, grillZ);
 
-            const emblemY = 2.38;
-            const emblemZ = grillZ + grillL / 2 + 0.005;
-            addPart("Emblem", createEmblem());
-            truckParts.Emblem.position.set(0, emblemY, emblemZ);
+    const emblemY = 2.38;
+    const emblemZ = grillZ + grillL / 2 + 0.005;
+    addPart("Emblem", createEmblem());
+    truckParts.Emblem.position.set(0, emblemY, emblemZ);
 
     const hoodH = 1.13;
     const hoodW = 1.13;
     const hoodL = 1.90;
     const hoodY = chassiY + chassiH / 2 + hoodH / 2 - 0.15;
     const hoodZ = grillZ - hoodL / 2; //To reduce a bit the rounded corner 3.44;
-    addPart("Capo", new THREE.Mesh(new RoundedBoxGeometry(hoodW, hoodH, hoodL, 4, 0.05), bodyMaterial));
+    addPart("Capo", CreateHood(hoodW, hoodH, hoodL, bodyMaterial));
     truckParts.Capo.position.set(0, hoodY, hoodZ);
 
     const cabinH = 1.78;
@@ -480,8 +480,13 @@ function createGrille(frameWidth, frameDepth, frameHeight, chromeMaterial) {
     grilleGroup.add(rightFrame);
 
     const topFrame = new THREE.Mesh(new THREE.BoxGeometry(frameWidth, topFrameThickness, frameDepth), chromeMaterial);
-            topFrame.position.y = frameHeight / 2 - topFrameThickness / 2;
-            grilleGroup.add(topFrame);
+    topFrame.position.y = frameHeight / 2 - topFrameThickness / 2;
+    grilleGroup.add(topFrame);
+
+    const frisoH = 0.026;
+    const friso = new THREE.Mesh(new THREE.BoxGeometry(0.07, frisoH, frameDepth), chromeMaterial);
+    friso.position.y = topFrame.position.y + topFrameThickness / 2 + frisoH / 2;
+    grilleGroup.add(friso);
 
     // Fewer vertical bars for depth
     const barCount = 6; // Reduced from 20
@@ -506,6 +511,19 @@ function createGrille(frameWidth, frameDepth, frameHeight, chromeMaterial) {
     }
 
     return grilleGroup;
+}
+
+
+function CreateHood(hoodW, hoodH, hoodL, bodyMaterial) {
+    const group = new THREE.Group();
+    const hood = new THREE.Mesh(new RoundedBoxGeometry(hoodW, hoodH, hoodL, 4, 0.05), bodyMaterial);
+    group.add(hood);
+    const frisoW = 0.07;
+    const frisoH = 0.04;
+    const friso = new THREE.Mesh(new RoundedBoxGeometry(frisoW, frisoH, hoodL, 4, 0.01), bodyMaterial);
+    friso.position.y = hoodH / 2;
+    group.add(friso);
+    return group;
 }
 
 
