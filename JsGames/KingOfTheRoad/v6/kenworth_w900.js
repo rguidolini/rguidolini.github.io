@@ -16,14 +16,14 @@ export class KenworthW900 {
             // linearDamping: 0.05
         });
 
-        const width = 2.30;
+        const width = 2.38;
         const length = 7.90;
         const height = 0.5;
         const chassisShape = new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, length / 2));
         chassisBody.addShape(chassisShape);
 
         const cabWidth = width;
-        const cabLength = 2 + 1.18 + 1.90;
+        const cabLength = 5;
         const cabHeight = 2.38;
         const cabY = cabHeight / 2 + height / 2;
         const cabZ = length / 2 - cabLength / 2;
@@ -58,10 +58,25 @@ export class KenworthW900 {
         this.wheelMeshes.forEach(mesh => { this.params.scene.add(mesh) });
 
         this.fifthWheelPoint = new CANNON.Vec3(0, height / 2 + 0.25, -length / 2 + 0.7 + 0.38);
+        const fifthWheelY = height / 2 + 0.18;
+        const fifthWheelBack = new CANNON.Box(new CANNON.Vec3(0.20 / 2, 0.1 / 2, 0.1 / 2));
+        chassisBody.addShape(fifthWheelBack, new CANNON.Vec3(0, fifthWheelY, -length / 2 + 1.23));
+
+        const fifthWheelZ = -length / 2 + 1;
+        const axis = new CANNON.Vec3(0, 1, 0);
+        const quaternion = new CANNON.Quaternion();
+        quaternion.setFromAxisAngle(axis, -Math.PI / 10);
+        const fifthWheelSideL = new CANNON.Box(new CANNON.Vec3(0.01, 0.1 / 2, 0.25));
+        chassisBody.addShape(fifthWheelSideL, new CANNON.Vec3(0.15, fifthWheelY, fifthWheelZ), quaternion);
+
+        const fifthWheelSideR = new CANNON.Box(new CANNON.Vec3(0.01, 0.1 / 2, 0.25));
+        quaternion.setFromAxisAngle(axis, Math.PI / 10);
+        chassisBody.addShape(fifthWheelSideR, new CANNON.Vec3(-0.15, fifthWheelY, fifthWheelZ), quaternion);
+
     }
 
     setSteering(value) {
-        const maxSteerVal = -1;  // Negative because the vehicle was created on the wrong axis
+        const maxSteerVal = -0.9;  // Negative because the vehicle was created on the wrong axis
         this.vehicle.setSteeringValue(value * maxSteerVal, 0);
         this.vehicle.setSteeringValue(value * maxSteerVal, 1);
     }
@@ -88,7 +103,7 @@ export class KenworthW900 {
         if (breakFraction != 0) {
             this.vehicle.chassisBody.allowSleep = true;
         }
-        const maxBrakeForce = 4000;
+        const maxBrakeForce = 5000;
         let force = maxBrakeForce * breakFraction;
         force *= this.isMoving();  // Applies a force opposite to the movement
         for (let i = 0; i < this.vehicle.wheelInfos.length; i++) {
@@ -226,7 +241,7 @@ export class KenworthW900 {
         const fifthWheelPosition = new CANNON.Vec3();
         this.vehicle.chassisBody.pointToWorldFrame(this.fifthWheelPoint, fifthWheelPosition);
         const distance = fifthWheelPosition.distanceTo(trailer.GetkingPinWorldPosition());
-        if (distance > 1) {
+        if (distance > 0.2) {
             this.showWarning("⚠ Failed to hitch: Fifth wheel not engaged");
             return;
         }

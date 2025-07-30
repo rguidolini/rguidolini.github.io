@@ -64,9 +64,9 @@
 
     #message-box {
       position: absolute;
-      top: 50%;
+      bottom: 20px;
       left: 50%;
-      transform: translate(-50%, -50%);
+      transform: translateX(-50%);
       background-color: rgba(26, 188, 156, 0.9);
       color: white;
       padding: 30px;
@@ -78,6 +78,7 @@
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
       max-width: 90%;
       width: 500px;
+      z-index: 2;
     }
 
     #message-box.fail {
@@ -350,8 +351,9 @@
         if (e.key === "5") camera.SwitchTo("rear");
         if (e.key === "6") camera.SwitchTo("left");
         if (e.key === "7") camera.SwitchTo("right");
-        if (e.key.toLowerCase() === "t") {
-          EngageTruckTrailer();
+        if (e.key.toLowerCase() === "t") EngageTruckTrailer();
+        if (e.key.toLowerCase() === "h") {
+            document.getElementById("game-info-panel").style.display = "block";
         }
         if (e.key === 'Enter') {
           e.preventDefault();

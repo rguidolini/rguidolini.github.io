@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { CreateMirror } from './mirrors.js';
 import { createSunVisor } from './sunvisor.js';
+import { CreateChassi } from './chassi.js';
 
 export function KenworthW900Visual() {
     const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xbd0000, metalness: 0.6, roughness: 0.4 });
@@ -20,11 +21,17 @@ export function KenworthW900Visual() {
         truckParts[name] = object;
     };
 
-    const chassiH = 0.30;
+    const chassiW = 0.80;
+    const chassiH = 0.25;
     const chassiL = 7.85;  // This will result in a total length of 7.90 m
     const chassiY = 1.30;
     const chassiZ = 0;
-    addPart("chassi", new THREE.Mesh(new THREE.BoxGeometry(0.8, chassiH, chassiL), blackMaterial));
+    // addPart("chassi", new THREE.Mesh(new THREE.BoxGeometry(0.8, chassiH, chassiL), blackMaterial));
+    addPart("chassi", CreateChassi(chassiW, chassiH, chassiL, [
+        { length: 2.00, isFront: true, position: 3.23 },
+        { length: 1.60, isFront: false, position: -2.15 },
+        { length: 1.60, isFront: false, position: -3.25 }
+    ]));
     truckParts.chassi.position.set(0, chassiY, chassiZ);
 
     const bumperW = 2.40;
@@ -33,14 +40,14 @@ export function KenworthW900Visual() {
     addPart("Parachoque", new THREE.Mesh(new RoundedBoxGeometry(bumperW, 0.50, bumperL, 4, 0.02), chromeMaterial));
     truckParts.Parachoque.position.set(0, 1.05, bumperZ);
 
-    const grillY = 1.86;
+    const grillY = 1.84;
     const grillL = 0.05;
     const grillH = 1.13;
     const grillZ = bumperZ + bumperL / 2 - grillL / 2;
     addPart("Grade", createGrille(grillH, 0.05, grillH, chromeMaterial));
     truckParts.Grade.position.set(0, grillY, grillZ);
 
-    const emblemY = 2.38;
+    const emblemY = 2.36;
     const emblemZ = grillZ + grillL / 2 + 0.005;
     addPart("Emblem", createEmblem());
     truckParts.Emblem.position.set(0, emblemY, emblemZ);
@@ -409,13 +416,19 @@ function createFifthWheel() {
     mainPlate.castShadow = true;
     fifthWheelGroup.add(mainPlate);
 
-    const support = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.1, 0.1), metalMaterial);
+    const support = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.1, 0.1), metalMaterial);
     support.position.y = -0.07;
     support.position.z = 0.15;
     fifthWheelGroup.add(support);
 
-    const base = new THREE.Mesh(new THREE.BoxGeometry(2 * outerRadius, 0.16, 2 * outerRadius), metalMaterial);
+    const baseX = 0.40 - 0.15 / 2;
+    let base = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.16, 1.5 * outerRadius), metalMaterial);
     base.position.y = -0.07 - 0.13;
+    base.position.x = baseX;
+    fifthWheelGroup.add(base);
+
+    base = base.clone();
+    base.position.x = -baseX;
     fifthWheelGroup.add(base);
     return fifthWheelGroup;
 }

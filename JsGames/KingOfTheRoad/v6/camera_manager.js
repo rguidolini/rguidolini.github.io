@@ -214,9 +214,9 @@ export class CameraManager {
 
     AddHoodCamera(innerWidth, innerHeight) {
         // Camera position: over the hood
-        const cameraOffset = new THREE.Vector3(0, 2.5, 2);
+        const cameraOffset = new THREE.Vector3(0, 1.7, 2.8);
         // Ponto para onde a câmera olha (à frente do caminhão)
-        const lookAtOffset = new THREE.Vector3(0, 1, 15);
+        const lookAtOffset = new THREE.Vector3(0, 1.2, 15);
         this.AddFixedCamera("hood", innerWidth, innerHeight, cameraOffset, lookAtOffset);
     }
 

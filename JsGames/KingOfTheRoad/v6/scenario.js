@@ -76,7 +76,7 @@ export class Scenario {
 
         const coneBody = new CANNON.Body({
             mass: 0,
-            shape: new CANNON.Cylinder(coneRadius, coneRadius, coneHeight, 16),
+            shape: new CANNON.Cylinder(coneRadius+0.01, 0.02, coneHeight+0.05, 16),
         });
         const axis = new CANNON.Vec3(1, 0, 0); // Y axis
         const angle = Math.PI / 2;

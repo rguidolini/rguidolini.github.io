@@ -66,7 +66,16 @@ export class TrunkTrailer {
         this.addToScene(this.params.scene);
         this.setParkingBrake(true);
 
-        this.KingPinPoint = new CANNON.Vec3(0, -height / 2 - 0.2, length / 2 - 1);
+        const kingZ = length / 2 - 1;
+        const kingY = -height / 2 - 0.2;
+        this.KingPinPoint = new CANNON.Vec3(0, kingY, kingZ);
+        const kingRadius = 0.05;
+        const kingH = 0.10 * 2;
+        const kingPin = new CANNON.Cylinder(kingRadius, kingRadius, kingH, 16);
+        const axis = new CANNON.Vec3(1, 0, 0);
+        const quaternion = new CANNON.Quaternion();
+        quaternion.setFromAxisAngle(axis, Math.PI / 2);
+        chassisBody.addShape(kingPin, new CANNON.Vec3(0, kingY, kingZ), quaternion);
     }
 
     addToScene(scene) {
