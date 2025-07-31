@@ -55,7 +55,6 @@ export class KeyboardController {
         return this.currentSteerValue;
     }
 
-
     /**
      * Controls the vehicle acceleration based on keyboard input.
      * @param {string} movementDirection: >0 for forward, <0 for backward.
@@ -71,15 +70,12 @@ export class KeyboardController {
             if (this.keys.ArrowDown) return -1;
         }
 
-
         // If command is in the same direction as the movement direction, throttle.
         if (movementDirection > 0 && this.keys.ArrowUp) return 1;
         if (movementDirection < 0 && this.keys.ArrowDown) return -1;
 
-
         return 0;
     }
-
 
     /**
      * Controls the vehicle Braking based on keyboard input.
@@ -88,7 +84,6 @@ export class KeyboardController {
      */
     getBrake(movementDirection) {
         if (this.brakeDirection !== 0) return 1; // If braking then keep braking.
-
 
         if (
             (movementDirection > 0 && this.keys.ArrowDown) ||
@@ -99,7 +94,6 @@ export class KeyboardController {
         }
         return 0;
     }
-
 
     switchParkingBreak() {
         this.parkingBrakeOn = !this.parkingBrakeOn;

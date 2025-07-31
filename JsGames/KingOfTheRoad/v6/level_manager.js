@@ -58,7 +58,7 @@ export class LevelManager {
         this.scenario.addConeCollisions(this.trunk_trailer.vehicle, this);
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(0, 3, -10, 0);
+        this.truck.reset(0, 2, -10, 0);
         this.trunk_trailer.Reset(-7, 3, 9, Math.PI / 2);
         this.camera.SwitchTo("orbital");
         this.camera.GetObject().ResetLeftView();
@@ -70,7 +70,7 @@ export class LevelManager {
         this.updateUi("90 Degree Maneuver", "Align and park the truck in the space.");
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(20, 3, -20, -Math.PI / 2);
+        this.truck.reset(20, 2, -20, -Math.PI / 2);
         this.trunk_trailer.Reset(-7, 3, 9, Math.PI / 2);
         this.camera.SwitchTo("orbital");
         this.camera.Reset();
@@ -82,7 +82,7 @@ export class LevelManager {
         this.updateUi("Reverse parking", "Align and reverse park the truck.");
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(0, 3, -10, 0);
+        this.truck.reset(0, 2, -10, 0);
         this.trunk_trailer.Reset(-7, 3, 9, Math.PI / 2);
         this.camera.SwitchTo("orbital");
         this.camera.GetObject().ResetLeftView();
@@ -112,7 +112,7 @@ export class LevelManager {
         this.scenario.addConeCollisions(this.trunk_trailer.vehicle, this);
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(0, 3, -10, 0);
+        this.truck.reset(0, 2, -10, 0);
         this.trunk_trailer.Reset(-7, 3, 9, Math.PI / 2);
         this.camera.SwitchTo("orbital");
         this.camera.GetObject().ResetLeftView();
@@ -140,7 +140,7 @@ export class LevelManager {
         this.scenario.addConeCollisions(this.trunk_trailer.vehicle, this);
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(0, 3, -10, 0);
+        this.truck.reset(0, 2, -10, 0);
         this.trunk_trailer.Reset(20, 3, 9, -Math.PI / 2);
         this.camera.SwitchTo("orbital");
         this.camera.GetObject().ResetRightView();

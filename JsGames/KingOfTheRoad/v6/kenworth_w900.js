@@ -72,7 +72,6 @@ export class KenworthW900 {
         const fifthWheelSideR = new CANNON.Box(new CANNON.Vec3(0.01, 0.1 / 2, 0.25));
         quaternion.setFromAxisAngle(axis, Math.PI / 10);
         chassisBody.addShape(fifthWheelSideR, new CANNON.Vec3(-0.15, fifthWheelY, fifthWheelZ), quaternion);
-
     }
 
     setSteering(value) {
