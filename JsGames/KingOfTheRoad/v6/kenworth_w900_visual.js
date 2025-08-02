@@ -26,7 +26,6 @@ export function KenworthW900Visual() {
     const chassiL = 7.85;  // This will result in a total length of 7.90 m
     const chassiY = 1.30;
     const chassiZ = 0;
-    // addPart("chassi", new THREE.Mesh(new THREE.BoxGeometry(0.8, chassiH, chassiL), blackMaterial));
     addPart("chassi", CreateChassi(chassiW, chassiH, chassiL, [
         { length: 2.00, isFront: true, position: 3.23 },
         { length: 1.60, isFront: false, position: -2.15 },

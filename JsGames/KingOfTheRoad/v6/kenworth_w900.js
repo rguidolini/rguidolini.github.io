@@ -4,6 +4,7 @@ import { KenworthW900Visual } from './kenworth_w900_visual.js';
 
 export class KenworthW900 {
     Initialize(params) {
+        this.parkingBrakeOn = false;
         this.params = params;
         this.vehicle;
         this.chassisMesh;
@@ -86,6 +87,9 @@ export class KenworthW900 {
     */
     Throttle(powerFraction) {
         if (powerFraction != 0) {
+            if (this.parkingBrakeOn) {
+                this.showWarning("⚠ Release parking brake drive");
+            }
             this.vehicle.chassisBody.allowSleep = false;
             this.vehicle.chassisBody.wakeUp();
         }
@@ -110,6 +114,7 @@ export class KenworthW900 {
     }
 
     setParkingBrake(isOn) {
+        this.parkingBrakeOn = isOn;
         const maxParkingBrakeForce = 50;
         const force = isOn ? maxParkingBrakeForce : 0;
         if (isOn) {
@@ -158,6 +163,14 @@ export class KenworthW900 {
     showWarning(message) {
         this.params.alertText.innerText = message;
         this.params.alertOverlay.style.display = 'flex';
+    }
+
+    showinfo(message) {
+        this.params.gameInfo.innerText = message;
+        this.params.gameInfo.style.display = 'block';
+        setTimeout(() => {
+            this.params.gameInfo.style.display = 'none';
+        }, 3000);
     }
 
     getChassisMesh() {
@@ -255,6 +268,7 @@ export class KenworthW900 {
         this.params.world.addConstraint(this.constraint);
         trailer.Engage();
         this.trailer = trailer;
+        this.showinfo("Trailer successfully hitched");
     }
 
     UnhitchTrailer() {
@@ -263,6 +277,7 @@ export class KenworthW900 {
         this.trailer = null;
         this.params.world.removeConstraint(this.constraint);
         this.constraint = null;
+        this.showinfo("Trailer successfully unhitched");
     }
 
     Update() {

@@ -13,7 +13,6 @@
       overflow: hidden;
       background-color: #333;
       font-family: "Inter", sans-serif;
-      cursor: grab;
     }
 
     body:active {
@@ -29,7 +28,7 @@
       top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      background-color: rgba(0, 0, 0, 0.7);
+      background-color: rgba(0, 0, 0, 0.75);
       color: white;
       padding: 15px 25px;
       border-radius: 12px;
@@ -40,11 +39,28 @@
       pointer-events: none;
     }
 
-    #game-info-panel {
+    #help-button {
+      position: absolute;
+      top: 20px;
+      left: 25px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      border-radius: 25px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      width: 50px;
+      height: 50px;
+      line-height: 50px;
+      font-size: 30px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    #game-controls-info {
       position: absolute;
       top: 20px;
       left: 20px;
-      background-color: rgba(0, 0, 0, 0.75);
+      background-color: rgba(0, 0, 0);
       color: white;
       padding: 15px 20px;
       border-radius: 12px;
@@ -57,8 +73,8 @@
 
     #close-info-button {
       position: absolute;
-      top: 5px;
-      right: 5px;
+      top: 15px;
+      right: 15px;
       width: 24px;
       height: 24px;
       background-color: rgba(231, 76, 60, 0.9);
@@ -126,9 +142,9 @@
       font-weight: bold;
       font-size: 1.1rem;
       display: none;
-      /* Escondido por defeito */
       border: 1px solid rgba(255, 255, 255, 0.4);
       text-shadow: 0 0 5px black;
+      cursor: pointer;
     }
 
     #speedometer {
@@ -148,7 +164,21 @@
       text-align: center;
     }
 
-    #topDash {
+    #game-info {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      background-color: rgba(0, 0, 0, 0.6);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+    }
+
+    #top-dash {
       position: absolute;
       top: 20px;
       right: 20px;
@@ -166,45 +196,40 @@
     }
 
     #alert-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.6);
       display: none;
-      /* Inicia escondido */
-      justify-content: center;
-      align-items: center;
-      z-index: 200;
     }
 
     #alert-panel {
       background-color: #f39c12;
       color: white;
-      padding: 25px;
-      border-radius: 15px;
+      padding: 0px;
+      border-radius: 5px;
       text-align: center;
       box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
       max-width: 90%;
-      width: 400px;
+      display: flex;
+      padding: 5px 15px;
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
     }
 
     #alert-text {
       font-size: 1.2rem;
-      margin-bottom: 20px;
       font-weight: 500;
     }
 
     #alert-close-button {
       background-color: #c0392b;
       color: white;
-      padding: 10px 30px;
       border: none;
-      border-radius: 8px;
+      border-radius: 15px;
       cursor: pointer;
       font-weight: bold;
-      transition: background-color 0.2s;
+      width: 30px;
+      height: 30px;
+      margin-left: 15px;
     }
 
     #alert-close-button:hover {
@@ -234,7 +259,7 @@
         <div>
           <h2 class="text-2xl font-bold mb-3">Vehicle Controls</h2>
           <ul class="space-y-2">
-            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↑</kbd> Forward / brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↑</kbd> Forward / Brake</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↓</kbd> Reverse / Brake</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">←</kbd> Turn left</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">→</kbd> Turn right</li>
@@ -275,10 +300,12 @@
       <p id="info-description" class="text-sm">Level description goes here</p>
     </div>
 
-    <div id="game-info-panel">
+    <div id="help-button">?</div>
+    <div id="game-controls-info">
       <span id="close-info-button" title="Close">X</span>
-      <div class="text-left text-sm mt-2">
+      <div class="text-left text-sm">
         <h1 class="text-xl font-bold mb-1">Controls</h1>
+        <hr class="border-gray-600 my-2" />
         <p><span class="font-bold">Arrows:</span> Move the truck</p>
         <p><span class="font-bold">Space:</span> Park brake</p>
         <p><span class="font-bold">T:</span> Hitch trailer</p>
@@ -303,19 +330,23 @@
       <div id="alert-overlay">
         <div id="alert-panel">
           <p id="alert-text"></p>
-          <button id="alert-close-button">Close (Enter)</button>
+          <button id="alert-close-button">X</button>
         </div>
       </div>
 
       <div id="parking-brake-indicator">(P)</div>
     </div>
 
-    <div id="topDash" style="font-family: sans-serif; font-size: large;">
+    <div id="top-dash" style="font-family: sans-serif; font-size: large;">
       <p id="attempty-counter">Attempty goes here</p>
       <p id="stopwatch">00:00</p>
     </div>
 
     <div id="speedometer">0 km/h</div>
+
+    <div id="game-info" style="display: none;">
+      GAME INFO GOES HERE
+    </div>
   </div>
   <script type="importmap">
         {
@@ -365,6 +396,7 @@
     const trunk_trailer = new TrunkTrailer();
     const keyboardController = new KeyboardController();
     const stopwatch = new Stopwatch(document.getElementById("stopwatch"));
+    let gameStarted = false;
     let camera, world;
     let level_manager;
     let cannonDebugger;
@@ -386,6 +418,8 @@
      * Função principal que inicializa e orquestra a criação do jogo.
      */
     function init() {
+      gameStarted = true;
+
       world = new CANNON.World();
       world.gravity.set(0, -9.82, 0);
       world.broadphase = new CANNON.SAPBroadphase(world);
@@ -414,6 +448,7 @@
         alertText: document.getElementById('alert-text'),
         brakeIndicator: document.getElementById("parking-brake-indicator"),
         speedometer: document.getElementById("speedometer"),
+        gameInfo: document.getElementById("game-info"),
         fifthWheelMaterial: fifthWheelMaterial
       });
 
@@ -426,7 +461,7 @@
       setupControls();
 
       const uiElements = {
-        infoPanel: document.getElementById('game-info-panel'),
+        infoPanel: document.getElementById('game-controls-info'),
         infoTitle: document.getElementById('info-title'),
         infoDescription: document.getElementById('info-description'),
         attemptyCounter: document.getElementById('attempty-counter'),
@@ -460,7 +495,7 @@
         if (e.key === "7") camera.SwitchTo("right");
         if (e.key.toLowerCase() === "t") EngageTruckTrailer();
         if (e.key.toLowerCase() === "h") {
-          document.getElementById("game-info-panel").style.display = "block";
+          document.getElementById("game-controls-info").style.display = "block";
         }
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -484,7 +519,10 @@
         camera.MouseWheel(e);
       });
       document.getElementById("close-info-button").addEventListener("click", () => {
-        document.getElementById("game-info-panel").style.display = "none";
+        document.getElementById("game-controls-info").style.display = "none";
+      });
+      document.getElementById("help-button").addEventListener("click", () => {
+        document.getElementById("game-controls-info").style.display = "block";
       });
       document.getElementById('alert-close-button').addEventListener('click', () => {
         document.getElementById('alert-overlay').style.display = 'none';
@@ -539,6 +577,7 @@
 
     // --- INICIAR JOGO ---
     window.addEventListener("resize", () => {
+      if (!gameStarted) return;
       camera.Resize(window.innerWidth, window.innerHeight);
       scenario.renderer.setSize(window.innerWidth, window.innerHeight);
     });
