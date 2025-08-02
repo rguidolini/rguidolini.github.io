@@ -23,7 +23,6 @@ export class LevelManager {
             return false;
         }
         this.gameEnded = false;
-        this.ui.infoPanel.style.display = 'block';
         this.ui.msgBox.style.display = 'none';
         this.stopwatch.Start();
         if (this.currentLevel === 1) this.setupLevel1();

@@ -20,6 +20,26 @@
       cursor: grabbing;
     }
 
+    #start-screen {
+      overflow-y: auto;
+    }
+
+    #top-info-panel {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 15px 25px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+
     #game-info-panel {
       position: absolute;
       top: 20px;
@@ -197,15 +217,68 @@
 </head>
 
 <body>
-  <div id="game-container">
+  <div id="start-screen"
+    class="absolute top-0 left-0 w-full h-full bg-gray-800 bg-opacity-95 flex flex-col items-center text-white p-8 z-50 text-center">
+    <div class="max-w-3xl" style="margin: auto;">
+      <img src="./img/banner_short.png" class="rounded-lg mb-8 w-full object-cover shadow-lg">
+      <h1 class="text-5xl font-bold mb-4" style="color: #d5b719">king of The Road</h1>
+      <p class="mb-8">
+        Freedom. Endless horizons. Life on the road isn't for everyone, but the reward is an office the size of the
+        world. And it all starts here. In this yard, your only opponents are the clock and your last attempt. With each
+        new "load" you fit into this
+        slot, you become faster, more precise.</p>
+      <p class="mb-8">Forget the others. The challenge is to be better than you were on your last delivery.</p>
+      <p class="mb-8">Ready for the next one?</p>
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10 text-left bg-gray-900 bg-opacity-50 p-6 rounded-lg border border-gray-700">
+        <div>
+          <h2 class="text-2xl font-bold mb-3">Vehicle Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↑</kbd> Forward / brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↓</kbd> Reverse / Brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">←</kbd> Turn left</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">→</kbd> Turn right</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">Espace</kbd> Parking brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">T</kbd> Hitch trailer</li>
+          </ul>
+
+          <span>&nbsp;</span>
+          <h2 class="text-2xl font-bold mb-3">General Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">H</kbd> Shows controls helper</li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="text-2xl font-bold mb-3">Camera Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">🖰</kbd> Free cam controls</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">0</kbd> Free cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">2</kbd> Hood cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">3</kbd> Roof cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">4</kbd> Top cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">5</kbd> Rear cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">6</kbd> Left wheel cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">7</kbd> Right wheel cam</li>
+          </ul>
+        </div>
+      </div>
+      <button id="start-game-button"
+        class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-10 rounded-lg text-2xl transition-transform transform hover:scale-105 shadow-lg">
+        Play Game
+      </button>
+    </div>
+  </div>
+
+  <div id="game-container" style="display: none;">
+    <div id="top-info-panel">
+      <h1 id="info-title" class="text-x2 font-bold mb-1">Level title goes here</h1>
+      <p id="info-description" class="text-sm">Level description goes here</p>
+    </div>
+
     <div id="game-info-panel">
       <span id="close-info-button" title="Close">X</span>
-      <h1 class="text-xl font-bold mb-1">King of the Road</h1>
-      <h2 id="info-title" class="text-x2 font-bold mb-1">Level title goes here</h2>
-      <p id="info-description" class="text-sm">Level description goes here</p>
-      <hr class="border-gray-600 my-2" />
       <div class="text-left text-sm mt-2">
-        <p>Instructions:</p>
+        <h1 class="text-xl font-bold mb-1">Controls</h1>
         <p><span class="font-bold">Arrows:</span> Move the truck</p>
         <p><span class="font-bold">Space:</span> Park brake</p>
         <p><span class="font-bold">T:</span> Hitch trailer</p>
@@ -470,7 +543,16 @@
       scenario.renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    window.onload = init;
+    window.onload = () => {
+      const startButton = document.getElementById('start-game-button');
+      const startScreen = document.getElementById('start-screen');
+      const gameContainer = document.getElementById('game-container');
+      startButton.addEventListener('click', () => {
+        startScreen.style.display = 'none';
+        gameContainer.style.display = 'block';
+        init();
+      });
+    };
   </script>
 </body>
 

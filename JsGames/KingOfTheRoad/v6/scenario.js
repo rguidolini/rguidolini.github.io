@@ -20,14 +20,14 @@ export class Scenario {
         this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         this.scene.fog = new THREE.Fog(0x87CEEB, 60, 120);
         const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
-        dirLight.position.set(20, 30, 20);
+        dirLight.position.set(20, 30, -20);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
-        dirLight.shadow.camera.top = 20;
-        dirLight.shadow.camera.bottom = -20;
-        dirLight.shadow.camera.left = -20;
-        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.camera.top = 40;
+        dirLight.shadow.camera.bottom = -40;
+        dirLight.shadow.camera.left = -40;
+        dirLight.shadow.camera.right = 40;
         this.scene.add(dirLight);
 
         createGround(this.scene, world);
