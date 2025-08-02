@@ -1,7 +1,7 @@
 export class Stopwatch {
     constructor(element) {
         this.element = element;
-        this.startTime = Date.now();
+        this.startTime = 0;
         this.elapsedTime = 0;
         this.intervalId = null;
     }
@@ -13,9 +13,25 @@ export class Stopwatch {
         return `${minutes}:${seconds}`;
     }
 
-    Update() {
-        this.elapsedTime = Date.now() - this.startTime;
-        this.element.innerText = this._formatTime(this.elapsedTime);
+    _update() {
+        this.elapsedTime += Date.now() - this.startTime;
+        this.startTime = Date.now();
+        if (this.element) {
+            this.element.innerText = this._formatTime(this.elapsedTime);
+        }
+    }
+
+    Start() {
+        if (this.intervalId) clearInterval(this.intervalId);
+        this.startTime = Date.now();
+        this.intervalId = setInterval(() => this._update(), 50);
+    }
+
+    Pause() {
+        clearInterval(this.intervalId);
+    }
+
+    getFormattedElapsedTime() {
+        return this._formatTime(this.elapsedTime);
     }
 }
-

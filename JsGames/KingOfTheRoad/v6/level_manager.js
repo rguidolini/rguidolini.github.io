@@ -1,5 +1,5 @@
 export class LevelManager {
-    constructor(uiElements, camera, truck, trunk_trailer, keyboardController, scenario) {
+    constructor(uiElements, camera, truck, trunk_trailer, keyboardController, scenario, stopwatch) {
         this.gameEnded = false;
         this.numLevels = 5;
         this.currentLevel = 1;
@@ -9,6 +9,7 @@ export class LevelManager {
         this.trunk_trailer = trunk_trailer;
         this.keyboardController = keyboardController;
         this.scenario = scenario;
+        this.stopwatch = stopwatch;
         this.checkSuccessFunction = null;
         this.attempty = 1;
     }
@@ -24,6 +25,7 @@ export class LevelManager {
         this.gameEnded = false;
         this.ui.infoPanel.style.display = 'block';
         this.ui.msgBox.style.display = 'none';
+        this.stopwatch.Start();
         if (this.currentLevel === 1) this.setupLevel1();
         if (this.currentLevel === 2) this.setupLevel2();
         if (this.currentLevel === 3) this.setupLevel3();
@@ -173,6 +175,7 @@ export class LevelManager {
         }
         this.gameEnded = true;
         this.truck.freeze();
+        this.stopwatch.Pause();
         this.ui.msgBox.className = 'message-box';
         this.ui.msgText.innerText = 'Congratulations!\n' + reason;
         this.ui.actionButton.innerText = "Start Level " + nextLevel;
@@ -187,6 +190,7 @@ export class LevelManager {
         this.gameEnded = true;
         this.attempty++;
         this.truck.freeze();
+        this.stopwatch.Pause();
         this.ui.msgText.innerText = 'Level failed!\n' + reason;
         this.ui.msgBox.className = 'message-box fail';
         this.ui.msgBox.style.display = 'block';

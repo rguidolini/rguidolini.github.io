@@ -319,6 +319,17 @@
       world.solver.iterations = 10
       world.allowSleep = true;
 
+      const fifthWheelMaterial = new CANNON.Material('fifthWheelMaterial');
+      const kingPinMaterial = new CANNON.Material('kingPinMaterial');
+      const contactMaterial = new CANNON.ContactMaterial(fifthWheelMaterial, kingPinMaterial, {
+        friction: 0,
+        restitution: 0,
+      });
+      world.addContactMaterial(contactMaterial);
+
+      // Add the ContactMaterial to the physics world
+      world.addContactMaterial(contactMaterial);
+
       camera = new CameraManager();
       camera.Initialize(window.innerWidth, window.innerHeight);
 
@@ -329,12 +340,14 @@
         alertOverlay: document.getElementById('alert-overlay'),
         alertText: document.getElementById('alert-text'),
         brakeIndicator: document.getElementById("parking-brake-indicator"),
-        speedometer: document.getElementById("speedometer")
+        speedometer: document.getElementById("speedometer"),
+        fifthWheelMaterial: fifthWheelMaterial
       });
 
       trunk_trailer.Initialize({
         world: world,
-        scene: scenario.scene
+        scene: scenario.scene,
+        kingPinMaterial: kingPinMaterial
       });
 
       setupControls();
@@ -348,8 +361,7 @@
         msgText: document.getElementById('message-text'),
         actionButton: document.getElementById('action-button')
       };
-
-      level_manager = new LevelManager(uiElements, camera, w900, trunk_trailer, keyboardController, scenario);
+      level_manager = new LevelManager(uiElements, camera, w900, trunk_trailer, keyboardController, scenario, stopwatch);
       level_manager.setupLevel();
 
       scenario.SetUpCollisions(w900.vehicle, level_manager);
@@ -375,7 +387,7 @@
         if (e.key === "7") camera.SwitchTo("right");
         if (e.key.toLowerCase() === "t") EngageTruckTrailer();
         if (e.key.toLowerCase() === "h") {
-            document.getElementById("game-info-panel").style.display = "block";
+          document.getElementById("game-info-panel").style.display = "block";
         }
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -448,7 +460,6 @@
       camera.UpdatePosition(w900.getChassisMesh());
 
       scenario.Update(camera.Get());
-      stopwatch.Update();
       logger.Update();
     }
 

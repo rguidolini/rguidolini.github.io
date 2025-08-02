@@ -33,15 +33,18 @@ export class KeyboardController {
         // --- LÓGICA DE DIREÇÃO GRADUAL BASEADA NO TEMPO ---
         const maxSteerVal = 1;
         const steerTime = 1; // Tempo em segundos para atingir o ângulo máximo
-        const returnTime = steerTime / 2.0; // Tempo de retorno (o dobro da velocidade)
         const steerSpeed = maxSteerVal / steerTime;
-        const returnSpeed = maxSteerVal / returnTime;
+        const returnSpeed = steerSpeed * 2;
+        const forcedReturnSpeed = steerSpeed * 3;
+        let speed = 0;
 
         if (this.keys.ArrowRight) {
-            this.currentSteerValue += steerSpeed * deltaTime;
+            speed = (this.currentSteerValue < 0) ? forcedReturnSpeed : steerSpeed;
+            this.currentSteerValue += speed * deltaTime;
             if (this.currentSteerValue > maxSteerVal) this.currentSteerValue = maxSteerVal;
         } else if (this.keys.ArrowLeft) {
-            this.currentSteerValue -= steerSpeed * deltaTime;
+            speed = (this.currentSteerValue > 0) ? forcedReturnSpeed : steerSpeed;
+            this.currentSteerValue -= speed * deltaTime;
             if (this.currentSteerValue < -maxSteerVal) this.currentSteerValue = -maxSteerVal;
         } else {
             if (this.currentSteerValue > 0) {

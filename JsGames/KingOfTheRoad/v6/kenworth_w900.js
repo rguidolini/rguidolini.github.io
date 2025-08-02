@@ -13,7 +13,7 @@ export class KenworthW900 {
         // 1. Física do Veículo
         const chassisBody = new CANNON.Body({
             mass: 3000,
-            // linearDamping: 0.05
+            material: params.fifthWheelMaterial,
         });
 
         const width = 2.38;
@@ -43,7 +43,6 @@ export class KenworthW900 {
 
         // Modelo Visual do Caminhao
         this.chassisMesh = new THREE.Group();
-        // const truckModel = createSimpleTruckModel();
         const truckModel = KenworthW900Visual();
         this.chassisMesh.add(truckModel);
 

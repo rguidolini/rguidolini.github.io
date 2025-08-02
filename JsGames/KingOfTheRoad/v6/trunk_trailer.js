@@ -19,7 +19,8 @@ export class TrunkTrailer {
 
         const chassisBody = new CANNON.Body({
             mass: 3000,
-            linearDamping: 0.05
+            linearDamping: 0.05,
+            material: params.kingPinMaterial,
         });
         const trunkShape = new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, length / 2));
         chassisBody.addShape(trunkShape);
