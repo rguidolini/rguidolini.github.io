@@ -122,16 +122,14 @@ export class TrunkTrailer {
         this.wheelMeshes.push((new TireWheelSet(rightSide, single)).Visual());
     }
 
-    freeze() {
+    Freeze() {
         this.vehicle.chassisBody.type = CANNON.Body.STATIC;
-        // this.vehicle.chassisBody.updateMassProperties();
     }
 
     Reset(x, y, z, angle) {
         this.vehicle.chassisBody.velocity.set(0, 0, 0);
         this.vehicle.chassisBody.angularVelocity.set(0, 0, 0);
         this.vehicle.chassisBody.type = CANNON.Body.DYNAMIC;
-        // this.vehicle.chassisBody.updateMassProperties();
         this.vehicle.chassisBody.position.set(x, y, z);
         this.vehicle.chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle);
     }

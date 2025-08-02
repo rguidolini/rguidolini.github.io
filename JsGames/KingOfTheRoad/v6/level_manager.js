@@ -186,8 +186,8 @@ export class LevelManager {
     }
 
     failedLevel(reason) {
-        this.gameEnded = true;
         this.attempty++;
+        this.gameEnded = true;
         this.truck.freeze();
         this.stopwatch.Pause();
         this.ui.msgText.innerText = 'Level failed!\n' + reason;

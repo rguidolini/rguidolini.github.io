@@ -228,21 +228,19 @@ export class KenworthW900 {
 
     freeze() {
         this.vehicle.chassisBody.type = CANNON.Body.STATIC;
-        this.vehicle.chassisBody.updateMassProperties();
         if (this.trailer) {
-            this.trailer.freeze();
+            this.trailer.Freeze();
         }
     }
 
     reset(x, y, z, angle) {
+        this.UnhitchTrailer();
+        this.vehicle.chassisBody.type = CANNON.Body.DYNAMIC;
+        this.setParkingBrake(true);
         this.vehicle.chassisBody.wakeUp();
         this.vehicle.chassisBody.allowSleep = true;
-        this.setParkingBrake(true);
-        this.UnhitchTrailer();
         this.vehicle.chassisBody.velocity.set(0, 0, 0);
         this.vehicle.chassisBody.angularVelocity.set(0, 0, 0);
-        this.vehicle.chassisBody.type = CANNON.Body.DYNAMIC;
-        this.vehicle.chassisBody.updateMassProperties();
         this.vehicle.chassisBody.position.set(x, y, z);
         this.vehicle.chassisBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), angle);
     }
@@ -253,7 +251,7 @@ export class KenworthW900 {
             return;
         }
         if (this.trailer) {
-            this.UnhitchTrailer();
+            if (this.UnhitchTrailer()) this.showinfo("Trailer successfully unhitched");
             return;
         }
         const fifthWheelPosition = new CANNON.Vec3();
@@ -279,12 +277,12 @@ export class KenworthW900 {
     }
 
     UnhitchTrailer() {
-        if (!this.trailer) return;
+        if (!this.trailer) return false;
         this.trailer.Engage();
         this.trailer = null;
         this.params.world.removeConstraint(this.constraint);
         this.constraint = null;
-        this.showinfo("Trailer successfully unhitched");
+        return true;
     }
 
     Update() {
