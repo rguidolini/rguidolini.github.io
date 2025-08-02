@@ -95,7 +95,11 @@ export class KenworthW900 {
         }
         const maxForce = -2000;  // The negative values is because the car was crated in the wrong axis
         let force = maxForce * powerFraction;
-        if (powerFraction < 0) force /= 2;
+        if (powerFraction < 0) {
+            console.log(this.GetSpeed());
+            force /= 2;
+            if (this.GetSpeed() < -2) force = 0;  // Do not go over 7 km/h (2m/s) in reverse
+        }
         for (let i = 2; i < 6; i++) {
             this.vehicle.applyEngineForce(force, i);
         }
@@ -163,6 +167,9 @@ export class KenworthW900 {
     showWarning(message) {
         this.params.alertText.innerText = message;
         this.params.alertOverlay.style.display = 'flex';
+        setTimeout(() => {
+            this.params.alertOverlay.style.display = 'none';
+        }, 5000);
     }
 
     showinfo(message) {
