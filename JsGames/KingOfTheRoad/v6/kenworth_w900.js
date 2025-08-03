@@ -266,7 +266,7 @@ export class KenworthW900 {
             axisA: CANNON.Vec3.UNIT_Y,
             axisB: CANNON.Vec3.UNIT_Y,
             angle: Math.PI / 10,
-            twistAngle: Math.PI / 2,
+            twistAngle: Math.PI / 1.5,
             collideConnected: false
         });
         this.params.world.addConstraint(this.constraint);

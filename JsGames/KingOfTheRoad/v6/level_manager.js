@@ -1,7 +1,7 @@
 export class LevelManager {
     constructor(uiElements, camera, truck, trunk_trailer, keyboardController, scenario, stopwatch) {
         this.gameEnded = false;
-        this.numLevels = 5;
+        this.numLevels = 6;
         this.currentLevel = 1;
         this.ui = uiElements;
         this.camera = camera;
@@ -30,6 +30,7 @@ export class LevelManager {
         if (this.currentLevel === 3) this.setupLevel3();
         if (this.currentLevel === 4) this.setupLevel4();
         if (this.currentLevel === 5) this.setupLevel5();
+        if (this.currentLevel === 6) this.setupLevel6();
         return true;
     }
 
@@ -83,7 +84,7 @@ export class LevelManager {
         this.updateUi("Reverse parking", "Align and reverse park the truck.");
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(0, 2, -10, 0);
+        this.truck.reset(20, 2, -20, -Math.PI / 2);
         this.trunk_trailer.Reset(-7, 3, 9, Math.PI / 2);
         this.camera.SwitchTo("orbital");
         this.camera.GetObject().ResetLeftView();
@@ -132,6 +133,36 @@ export class LevelManager {
     }
 
     setupLevel5() {
+        this.updateUi("Advanced Trailer Abilities", "Hitch the trailer and park it on the indicated area on the left");
+
+        const parkX = 15;
+        const parkZ = -18;
+        this.scenario.resetParkingZone(4, 16, parkX, parkZ);
+        this.scenario.addConeCollisions(this.truck.vehicle, this);
+        this.scenario.addConeCollisions(this.trunk_trailer.vehicle, this);
+
+        this.keyboardController.lockParkingBreak();
+        this.truck.reset(0, 3, 12, Math.PI / 2);
+        this.trunk_trailer.Reset(-12, 3, 12, Math.PI / 2);
+        this.camera.SwitchTo("orbital");
+        this.camera.GetObject().ResetRightView();
+
+        this.checkSuccessFunction = () => {
+            const chassisBody = this.trunk_trailer.vehicle.chassisBody;
+            const pos = chassisBody.position;
+            const quat = chassisBody.quaternion;
+            const speed = chassisBody.velocity.length();
+            const angleY = 2 * Math.atan2(quat.y, quat.w);
+            const isInParkingZone = Math.abs(pos.x - parkX) < 0.5 && Math.abs(pos.z - parkZ) < 0.5;
+            if (isInParkingZone) {
+                if (speed < 0.1 && Math.abs(angleY) > 3.09 && Math.abs(angleY) < 3.19) {
+                    this.passedLevel("You parked successfuly, you're becoming a rock star!");
+                }
+            }
+        }
+    }
+
+    setupLevel6() {
         this.updateUi("Advanced Trailer Abilities", "Hitch the trailer and reverse park it on the indicated area");
 
         const parkX = -12;

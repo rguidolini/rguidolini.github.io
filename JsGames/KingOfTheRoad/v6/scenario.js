@@ -33,7 +33,7 @@ export class Scenario {
         createGround(this.scene, world);
         this.addParkingZone(3.5, 8.5, 0, 0);
 
-        const wallLength = 40;
+        const wallLength = 50;
         const longWallLength = 60;
         const yOffset = 15;
         const yPos = -wallLength / 2 + yOffset;
