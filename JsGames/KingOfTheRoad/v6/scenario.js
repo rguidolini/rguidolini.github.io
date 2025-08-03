@@ -76,7 +76,7 @@ export class Scenario {
 
         const coneBody = new CANNON.Body({
             mass: 0,
-            shape: new CANNON.Cylinder(coneRadius+0.01, 0.02, coneHeight+0.05, 16),
+            shape: new CANNON.Cylinder(coneRadius + 0.01, 0.02, coneHeight + 0.05, 16),
         });
         const axis = new CANNON.Vec3(1, 0, 0); // Y axis
         const angle = Math.PI / 2;
@@ -101,13 +101,11 @@ export class Scenario {
         });
     }
 
-    SetUpCollisions(vehicle, level_manager) {
+    SetUpCollisions(level_manager) {
         this.cones.forEach((cone) => {
             cone.body.addEventListener("collide", (event) => {
                 if (!level_manager.Ended()) {
-                    if (event.body === vehicle.chassisBody) {
-                        level_manager.failedLevel("You crashed into a cone.");
-                    }
+                    level_manager.failedLevel("You crashed into a cone.");
                 }
             });
         });
@@ -115,17 +113,13 @@ export class Scenario {
         this.walls.forEach((wall) => {
             wall.addEventListener("collide", (event) => {
                 if (!level_manager.Ended()) {
-                    if (event.body === vehicle.chassisBody) {
-                        level_manager.failedLevel("You crashed into a wall.");
-                    }
+                    level_manager.failedLevel("You crashed into a wall.");
                 }
             });
         });
 
         this.warehouseBody.addEventListener('collide', (event) => {
-            if (event.body === vehicle.chassisBody) {
-                level_manager.failedLevel("You crashed into the Warehouse");
-            }
+            level_manager.failedLevel("You crashed into the Warehouse");
         });
     }
 

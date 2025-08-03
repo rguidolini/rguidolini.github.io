@@ -134,9 +134,9 @@ export class LevelManager {
     setupLevel5() {
         this.updateUi("Advanced Trailer Abilities", "Hitch the trailer and reverse park it on the indicated area");
 
-        const parkX = -11.5;
+        const parkX = -12;
         const parkZ = 9.5;
-        this.scenario.resetParkingZone(16, 4, parkX, parkZ);
+        this.scenario.resetParkingZone(15, 4, parkX, parkZ);
         this.scenario.addConeCollisions(this.truck.vehicle, this);
         this.scenario.addConeCollisions(this.trunk_trailer.vehicle, this);
 

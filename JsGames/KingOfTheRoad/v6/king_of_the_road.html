@@ -164,20 +164,6 @@
       text-align: center;
     }
 
-    #game-info {
-      position: absolute;
-      left: 20px;
-      bottom: 20px;
-      background-color: rgba(0, 0, 0, 0.6);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      text-align: center;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-      transition: all 0.3s ease;
-    }
-
     #top-dash {
       position: absolute;
       top: 20px;
@@ -195,24 +181,38 @@
       text-align: center;
     }
 
+    #game-info {
+      position: absolute;
+      bottom: 20px;
+      left: 25%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+    }
+
     #alert-overlay {
       display: none;
     }
 
     #alert-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 25%;
+      transform: translateX(-50%);
       background-color: #f39c12;
       color: white;
-      padding: 0px;
       border-radius: 5px;
       text-align: center;
       box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
       max-width: 90%;
       display: flex;
       padding: 5px 15px;
-      position: absolute;
-      bottom: 80px;
-      left: 50%;
-      transform: translateX(-50%);
     }
 
     #alert-text {
@@ -434,9 +434,6 @@
       });
       world.addContactMaterial(contactMaterial);
 
-      // Add the ContactMaterial to the physics world
-      world.addContactMaterial(contactMaterial);
-
       camera = new CameraManager();
       camera.Initialize(window.innerWidth, window.innerHeight);
 
@@ -472,7 +469,7 @@
       level_manager = new LevelManager(uiElements, camera, w900, trunk_trailer, keyboardController, scenario, stopwatch);
       level_manager.setupLevel();
 
-      scenario.SetUpCollisions(w900.vehicle, level_manager);
+      scenario.SetUpCollisions(level_manager);
 
       initCannonDebugger();
 
