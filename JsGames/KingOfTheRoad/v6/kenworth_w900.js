@@ -88,7 +88,7 @@ export class KenworthW900 {
     Throttle(powerFraction) {
         if (powerFraction != 0) {
             if (this.parkingBrakeOn) {
-                this.showWarning("⚠ Release parking brake drive");
+                this.showWarning("⚠ Release the parking brake to drive");
             }
             this.vehicle.chassisBody.allowSleep = false;
             this.vehicle.chassisBody.wakeUp();

@@ -11,7 +11,7 @@ export class LevelManager {
         this.scenario = scenario;
         this.stopwatch = stopwatch;
         this.checkSuccessFunction = null;
-        this.attempty = 1;
+        this.attempt = 1;
     }
 
     Ended() {
@@ -186,7 +186,7 @@ export class LevelManager {
             const isInParkingZone = Math.abs(pos.x - parkX) < 0.5 && Math.abs(pos.z - parkZ) < 0.5;
             if (isInParkingZone) {
                 if (speed < 0.1 && Math.abs(angleY) > 4.65 && Math.abs(angleY) < 4.78) {
-                    this.passedLevel("You are the King of the Road!\nPlay again?");
+                    this.passedLevel("🎉🎉🎉\nYou are the\nKing of The Road!\n👑👑👑");
                 }
             }
         }
@@ -195,7 +195,7 @@ export class LevelManager {
     updateUi(infoTitle, infoDescription) {
         this.ui.infoTitle.innerText = "Level " + this.currentLevel + ": " + infoTitle;
         this.ui.infoDescription.innerText = infoDescription;
-        this.ui.attemptyCounter.innerText = "Attempty: " + this.attempty;
+        this.ui.attemptCounter.innerText = "Attempt: " + this.attempt;
     }
 
     passedLevel(reason) {
@@ -208,7 +208,8 @@ export class LevelManager {
         this.stopwatch.Pause();
         this.ui.msgBox.className = 'message-box';
         this.ui.msgText.innerText = 'Congratulations!\n' + reason;
-        this.ui.actionButton.innerText = "Start Level " + nextLevel;
+        const buttonText = nextLevel === 2 ? "Play Again" : "Start Level " + nextLevel;
+        this.ui.actionButton.innerText = buttonText;
         this.ui.actionButton.onclick = () => {
             this.currentLevel = nextLevel;
             this.setupLevel();
@@ -217,7 +218,7 @@ export class LevelManager {
     }
 
     failedLevel(reason) {
-        this.attempty++;
+        this.attempt++;
         this.gameEnded = true;
         this.truck.freeze();
         this.stopwatch.Pause();

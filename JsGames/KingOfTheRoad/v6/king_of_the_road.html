@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>King Of The Road V6</title>
+  <title>King of The Road</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
   <style>
@@ -263,7 +263,7 @@
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↓</kbd> Reverse / Brake</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">←</kbd> Turn left</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">→</kbd> Turn right</li>
-            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">Espace</kbd> Parking brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">Space</kbd> Parking brake</li>
             <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">T</kbd> Hitch trailer</li>
           </ul>
 
@@ -276,7 +276,7 @@
         <div>
           <h2 class="text-2xl font-bold mb-3">Camera Controls</h2>
           <ul class="space-y-2">
-            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">🖰</kbd> Free cam controls</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">&#x1F5B0;</kbd> Free cam controls</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">0</kbd> Free cam</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">2</kbd> Hood cam</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">3</kbd> Roof cam</li>
@@ -338,7 +338,7 @@
     </div>
 
     <div id="top-dash" style="font-family: sans-serif; font-size: large;">
-      <p id="attempty-counter">Attempty goes here</p>
+      <p id="attempt-counter">Attempt goes here</p>
       <p id="stopwatch">00:00</p>
     </div>
 
@@ -461,7 +461,7 @@
         infoPanel: document.getElementById('game-controls-info'),
         infoTitle: document.getElementById('info-title'),
         infoDescription: document.getElementById('info-description'),
-        attemptyCounter: document.getElementById('attempty-counter'),
+        attemptCounter: document.getElementById('attempt-counter'),
         msgBox: document.getElementById('message-box'),
         msgText: document.getElementById('message-text'),
         actionButton: document.getElementById('action-button')
