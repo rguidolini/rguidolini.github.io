@@ -434,9 +434,6 @@
       });
       world.addContactMaterial(contactMaterial);
 
-      camera = new CameraManager();
-      camera.Initialize(window.innerWidth, window.innerHeight);
-
       scenario.Initialize(world);
       w900.Initialize({
         world: world,
@@ -454,6 +451,8 @@
         scene: scenario.scene,
         kingPinMaterial: kingPinMaterial
       });
+
+      camera = new CameraManager(window.innerWidth, window.innerHeight, w900);
 
       setupControls();
 
@@ -564,9 +563,8 @@
       cannonDebugger.update();
 
       w900.Update();
-      trunk_trailer.UpdatePosition();
-      camera.UpdatePosition(w900.getChassisMesh());
-
+      trunk_trailer.Update();
+      camera.Update();
       scenario.Update(camera.Get());
       logger.Update();
     }

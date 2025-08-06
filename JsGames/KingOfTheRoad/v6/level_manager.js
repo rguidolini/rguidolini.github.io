@@ -22,6 +22,9 @@ export class LevelManager {
         if (this.currentLevel > this.numLevels) {
             return false;
         }
+        if (this.currentLevel === 1) {
+             this.stopwatch.Reset();
+        }
         this.gameEnded = false;
         this.ui.msgBox.style.display = 'none';
         this.stopwatch.Start();
@@ -208,7 +211,7 @@ export class LevelManager {
         this.stopwatch.Pause();
         this.ui.msgBox.className = 'message-box';
         this.ui.msgText.innerText = 'Congratulations!\n' + reason;
-        const buttonText = nextLevel === 2 ? "Play Again" : "Start Level " + nextLevel;
+        const buttonText = nextLevel === 1 ? "Play Again" : "Start Level " + nextLevel;
         this.ui.actionButton.innerText = buttonText;
         this.ui.actionButton.onclick = () => {
             this.currentLevel = nextLevel;

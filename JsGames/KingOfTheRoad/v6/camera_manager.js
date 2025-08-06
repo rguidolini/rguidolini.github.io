@@ -31,8 +31,8 @@ class Camera {
     }
 
 
-    UpdatePosition(chassisMesh) {
-        console.log("UpdatePosition not implemented for", this.id);
+    Update(truck) {
+        console.log("Update not implemented for", this.id);
     }
 
     Resize(innerWidth, innerHeight) {
@@ -135,8 +135,8 @@ class OrbitalCamera extends Camera {
     /**
      * Updates the camera position based on the truck position.
      */
-    UpdatePosition(chassisMesh) {
-        const truckPosition = chassisMesh.position;
+    Update(truck) {
+        const truckPosition = truck.getChassisMesh().position;
         const cameraTargetPosition = new THREE.Vector3(
             truckPosition.x +
             this.cameraRadius * Math.sin(this.cameraPhi) * Math.sin(this.cameraTheta),
@@ -172,23 +172,27 @@ class FixedCamera extends Camera {
     /**
      * Updates the camera position based on the truck position.
      */
-    UpdatePosition(chassisMesh) {
-        const cameraPosition = chassisMesh.localToWorld(this.cameraOffset.clone());
+    Update(truck) {
+        const chassisMesh = truck.getChassisMesh();
+        let positionOffset = this.cameraOffset.clone();
+        let lookAtOffset = this.lookAtOffset.clone();
+        if (this.id === "top" && truck.HasTrailer()) {
+            positionOffset.z -= 8;
+            lookAtOffset.z -= 8;
+        }
+        const cameraPosition = chassisMesh.localToWorld(positionOffset);
         this.camera.position.copy(cameraPosition);
-        const lookAtPosition = chassisMesh.localToWorld(this.lookAtOffset.clone());
+        const lookAtPosition = chassisMesh.localToWorld(lookAtOffset);
         this.camera.lookAt(lookAtPosition);
     }
 }
 
 
 export class CameraManager {
-    constructor() {
+    constructor(innerWidth, innerHeight, truck) {
         this.cameras = {};
+        this.truck = truck;
         this.orbitId = "orbital";
-    }
-
-
-    Initialize(innerWidth, innerHeight) {
         this.AddOrbitalCamera(this.orbitId, innerWidth, innerHeight);
         this.AddHoodCamera(innerWidth, innerHeight);
         this.AddRoofCamera(innerWidth, innerHeight);
@@ -232,7 +236,7 @@ export class CameraManager {
         // Camera position: over the hood
         const cameraOffset = new THREE.Vector3(0, 20, 0);
         // Ponto para onde a câmera olha (à frente do caminhão)
-        const lookAtOffset = new THREE.Vector3(0, 0, 0.5);
+        const lookAtOffset = new THREE.Vector3(0, 0, 1);
         this.AddFixedCamera("top", innerWidth, innerHeight, cameraOffset, lookAtOffset);
     }
 
@@ -307,8 +311,8 @@ export class CameraManager {
     }
 
 
-    UpdatePosition(chassisMesh) {
-        this.cameras[this.currentCamera].UpdatePosition(chassisMesh);
+    Update() {
+        this.cameras[this.currentCamera].Update(this.truck);
     }
 
 

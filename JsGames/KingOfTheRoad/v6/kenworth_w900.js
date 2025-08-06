@@ -284,6 +284,10 @@ export class KenworthW900 {
         return true;
     }
 
+    HasTrailer() {
+        return this.trailer !== null;
+    }
+
     Update() {
         this.chassisMesh.position.copy(this.vehicle.chassisBody.position);
         this.chassisMesh.quaternion.copy(this.vehicle.chassisBody.quaternion);

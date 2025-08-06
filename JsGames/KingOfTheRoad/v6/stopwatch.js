@@ -1,8 +1,8 @@
 export class Stopwatch {
     constructor(element) {
         this.element = element;
-        this.startTime = 0;
         this.elapsedTime = 0;
+        this.startTime = null;
         this.intervalId = null;
     }
 
@@ -19,6 +19,11 @@ export class Stopwatch {
         if (this.element) {
             this.element.innerText = this._formatTime(this.elapsedTime);
         }
+    }
+
+    Reset() {
+        clearInterval(this.intervalId);
+        this.elapsedTime = 0;
     }
 
     Start() {

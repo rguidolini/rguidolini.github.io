@@ -152,7 +152,7 @@ export class TrunkTrailer {
         }
     }
 
-    UpdatePosition() {
+    Update() {
         this.chassisMesh.position.copy(this.vehicle.chassisBody.position);
         this.chassisMesh.quaternion.copy(this.vehicle.chassisBody.quaternion);
 
