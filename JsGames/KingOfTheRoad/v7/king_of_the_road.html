@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>King of The Road</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #333;
+      font-family: "Inter", sans-serif;
+    }
+
+    body:active {
+      cursor: grabbing;
+    }
+
+    #start-screen {
+      overflow-y: auto;
+    }
+
+    #top-info-panel {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 15px 34px 15px 25px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+
+    #close-top-info-button {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      background-color: rgba(231, 76, 60, 0.9);
+      color: #e0e0e0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      font-size: 0.75rem;
+      line-height: 1;
+      cursor: pointer;
+      pointer-events: auto;
+      user-select: none;
+      transition:
+        background-color 0.2s,
+        color 0.2s;
+    }
+
+    #close-top-info-button:hover {
+      background-color: rgba(248, 25, 0, 0.9);
+      color: #fff;
+    }
+
+    #help-button {
+      position: absolute;
+      top: 20px;
+      left: 25px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      border-radius: 25px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      width: 50px;
+      height: 50px;
+      line-height: 50px;
+      font-size: 30px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    #game-controls-info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background-color: rgba(0, 0, 0);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      max-width: 300px;
+      z-index: 10;
+      display: none;
+    }
+
+    #close-info-button {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      width: 24px;
+      height: 24px;
+      background-color: rgba(231, 76, 60, 0.9);
+      color: #e0e0e0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      transition:
+        background-color 0.2s,
+        color 0.2s;
+    }
+
+    #close-info-button:hover {
+      background-color: rgba(248, 25, 0, 0.9);
+      color: #fff;
+    }
+
+    #message-box {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(26, 188, 156, 0.9);
+      color: white;
+      padding: 30px;
+      border-radius: 15px;
+      font-size: 2rem;
+      font-weight: bold;
+      display: none;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      max-width: 90%;
+      width: 500px;
+      z-index: 2;
+    }
+
+    #message-box.fail {
+      background-color: rgba(231, 76, 60, 0.9);
+    }
+
+    #action-button {
+      cursor: pointer;
+      font-size: 1.1rem;
+      margin-top: 10px;
+      background-color: #4a5d45;
+      padding: 8px 16px;
+      border-radius: 5px;
+    }
+
+    #parking-brake-indicator {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(200, 0, 0, 0.85);
+      color: white;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-weight: bold;
+      font-size: 1.1rem;
+      display: none;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      text-shadow: 0 0 5px black;
+      cursor: pointer;
+    }
+
+    #speedometer {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 1.8rem;
+      font-weight: bold;
+      font-family: "Courier New", Courier, monospace;
+      text-shadow: 2px 2px 4px black;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      min-width: 150px;
+      text-align: center;
+    }
+
+    #top-dash {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 1.8rem;
+      font-weight: bold;
+      font-family: "Courier New", Courier, monospace;
+      text-shadow: 2px 2px 4px black;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      min-width: 150px;
+      text-align: center;
+    }
+
+    #game-info {
+      position: absolute;
+      bottom: 20px;
+      left: 25%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+    }
+
+    #alert-overlay {
+      display: none;
+    }
+
+    #alert-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 25%;
+      transform: translateX(-50%);
+      background-color: #f39c12;
+      color: white;
+      border-radius: 5px;
+      text-align: center;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+      max-width: 90%;
+      display: flex;
+      padding: 5px 15px;
+    }
+
+    #alert-text {
+      font-size: 1.2rem;
+      font-weight: 500;
+    }
+
+    #alert-close-button {
+      background-color: #c0392b;
+      color: white;
+      border: none;
+      border-radius: 15px;
+      cursor: pointer;
+      font-weight: bold;
+      width: 30px;
+      height: 30px;
+      margin-left: 15px;
+    }
+
+    #alert-close-button:hover {
+      background-color: #e74c3c;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+  <div id="start-screen"
+    class="absolute top-0 left-0 w-full h-full bg-gray-800 bg-opacity-95 flex flex-col items-center text-white p-8 z-50 text-center">
+    <div class="max-w-3xl" style="margin: auto;">
+      <img src="./img/banner_short.png" class="rounded-lg mb-8 w-full object-cover shadow-lg">
+      <h1 class="text-5xl font-bold mb-4" style="color: #ffd600">King of The Road</h1>
+      <p class="mb-8">
+        Freedom. Endless horizons. Life on the road isn't for everyone, but the reward is an office the size of the
+        world. And it all starts here. In this yard, your only opponents are the clock and your last attempt. With each
+        new "load" you fit into this slot, you become experienced, faster, wiser.</p>
+      <p class="mb-8">Ready for the next one?</p>
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10 text-left bg-gray-900 bg-opacity-50 p-6 rounded-lg border border-gray-700">
+        <div>
+          <h2 class="text-2xl font-bold mb-3">Vehicle Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↑</kbd> Forward / Brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↓</kbd> Reverse / Brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">←</kbd> Turn left</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">→</kbd> Turn right</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">Space</kbd> Parking brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">T</kbd> Hitch trailer</li>
+          </ul>
+
+          <span>&nbsp;</span>
+          <h2 class="text-2xl font-bold mb-3">General Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">H</kbd> Show controls helper</li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="text-2xl font-bold mb-3">Camera Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">🖰</kbd> Free cam controls</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">0</kbd> Free cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">2</kbd> Hood cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">3</kbd> Roof cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">4</kbd> Top cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">5</kbd> Rear cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">6</kbd> Left wheel cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">7</kbd> Right wheel cam</li>
+          </ul>
+        </div>
+      </div>
+      <button id="start-game-button"
+        class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-10 rounded-lg text-2xl transition-transform transform hover:scale-105 shadow-lg">
+        Play Game
+      </button>
+    </div>
+  </div>
+
+  <div id="game-container" style="display: none;">
+    <div id="top-info-panel">
+      <span id="close-top-info-button" title="Fechar">✕</span>
+      <h1 id="info-title" class="text-x2 font-bold mb-1">Level title goes here</h1>
+      <p id="info-description" class="text-sm">Level description goes here</p>
+    </div>
+
+    <div id="help-button">?</div>
+    <div id="game-controls-info">
+      <span id="close-info-button" title="Close">X</span>
+      <div class="text-left text-sm">
+        <h1 class="text-xl font-bold mb-1">Controls</h1>
+        <hr class="border-gray-600 my-2" />
+        <p><span class="font-bold">Arrows:</span> Move the truck</p>
+        <p><span class="font-bold">Space:</span> Park brake</p>
+        <p><span class="font-bold">T:</span> Hitch trailer</p>
+        <p><span class="font-bold">Mouse:</span> Move Cam </p>
+        <p><span class="font-bold">Scroll:</span> Zoom</p>
+        <p><span class="font-bold">0:</span> Free cam</p>
+        <p><span class="font-bold">2:</span> Hood cam</p>
+        <p><span class="font-bold">3:</span> Roof cam</p>
+        <p><span class="font-bold">4:</span> Top cam</p>
+        <p><span class="font-bold">5:</span> Rear cam</p>
+        <p><span class="font-bold">6:</span> Left wheel cam</p>
+        <p><span class="font-bold">7:</span> Right wheel cam</p>
+      </div>
+    </div>
+
+    <div id="message-box">
+      <p id="message-text"></p>
+      <button id="action-button" class="mt-4 text-lg font-normal"></button>
+    </div>
+
+    <div id="Truck dashboard">
+      <div id="alert-overlay">
+        <div id="alert-panel">
+          <p id="alert-text"></p>
+          <button id="alert-close-button">X</button>
+        </div>
+      </div>
+
+      <div id="parking-brake-indicator">(P)</div>
+    </div>
+
+    <div id="top-dash" style="font-family: sans-serif; font-size: large;">
+      <p id="attempt-counter">Attempt goes here</p>
+      <p id="stopwatch">00:00</p>
+    </div>
+
+    <div id="speedometer">0 km/h</div>
+
+    <div id="game-info" style="display: none;">
+      GAME INFO GOES HERE
+    </div>
+  </div>
+  <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.18.0/dist/cannon-es.js",
+                "cannon-es-debugger": "./cannon-es-debugger.js"
+            }
+        }
+  </script>
+
+  <!----------------------------------------------------------------------------------------------
+   -- GLOBAL VARIABLES --
+   ----------------------------------------------------------------------------------------------->
+  <script type="module">
+    import * as THREE from 'three';
+    import { Scenario } from './scenario.js';
+    import { CameraManager } from './camera_manager.js';
+    import { KeyboardController } from './keyboard_controller.js';
+    import { LevelManager } from './level_manager.js';
+    import { KenworthW900 } from './kenworth_w900.js';
+    import { TrunkTrailer } from './trunk_trailer.js';
+    import { Stopwatch } from './stopwatch.js';
+    import CannonDebugger from 'cannon-es-debugger'
+
+    /**
+     * Instala as Soluções A e C diretamente no CANNON.RaycastVehicle (cannon.js 0.6.2):
+     *  - Solução A: Executa os raios e a suspensão vertical do RaycastVehicle em `world.subsystems`
+     *    (ANTES do `narrowphase` e do `solver.solve(dt)`), acumulando a força/torque da suspensão
+     *    em `chassisBody.force` e `chassisBody.torque`. Assim, quando o solver resolve o contato
+     *    dos pés rígidos dianteiros do trailer, a traseira já está sustentada pelas rodas e não
+     *    gera rotação fantasma nem empurrão horizontal por atrito.
+     *  - Solução C: Divide o impulso de frenagem (`calcRollingFriction`) pelo número de rodas em
+     *    contato com o solo (`numWheelsOnGround`), eliminando o overshoot de 400%/600% quando
+     *    `setBrake()` é acionado em múltiplas rodas.
+     */
+    function installCannonFixesAC(CANNON) {
+      const Vec3 = CANNON.Vec3;
+      const worldAxis = [new Vec3(1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, 1)];
+
+      function computeImpulseDenominator(body, pos, normal) {
+        const r0 = new Vec3(), c0 = new Vec3(), vec = new Vec3(), m = new Vec3();
+        pos.vsub(body.position, r0);
+        r0.cross(normal, c0);
+        body.invInertiaWorld.vmult(c0, m);
+        m.cross(r0, vec);
+        return body.invMass + normal.dot(vec);
+      }
+
+      function resolveSingleBilateral(body1, pos1, body2, pos2, normal) {
+        const normalLenSqr = normal.norm2();
+        if (normalLenSqr > 1.1) return 0;
+        const vel1 = new Vec3(), vel2 = new Vec3(), vel = new Vec3();
+        body1.getVelocityAtWorldPoint(pos1, vel1);
+        body2.getVelocityAtWorldPoint(pos2, vel2);
+        vel1.vsub(vel2, vel);
+        const rel_vel = normal.dot(vel);
+        const contactDamping = 0.2;
+        const massTerm = 1 / (body1.invMass + body2.invMass);
+        return -contactDamping * rel_vel * massTerm;
+      }
+
+      function calcRollingFriction(body0, body1, frictionPosWorld, frictionDirectionWorld, maxImpulse, numWheelsOnGround) {
+        const vel1 = new Vec3(), vel2 = new Vec3(), vel = new Vec3();
+        body0.getVelocityAtWorldPoint(frictionPosWorld, vel1);
+        body1.getVelocityAtWorldPoint(frictionPosWorld, vel2);
+        vel1.vsub(vel2, vel);
+        const vrel = frictionDirectionWorld.dot(vel);
+        const denom0 = computeImpulseDenominator(body0, frictionPosWorld, frictionDirectionWorld);
+        const denom1 = computeImpulseDenominator(body1, frictionPosWorld, frictionDirectionWorld);
+        const jacDiagABInv = 1 / ((denom0 + denom1) * (numWheelsOnGround || 1));
+        let j1 = -vrel * jacDiagABInv;
+        if (j1 > maxImpulse) j1 = maxImpulse;
+        if (j1 < -maxImpulse) j1 = -maxImpulse;
+        return j1;
+      }
+
+      CANNON.RaycastVehicle.prototype.updateFriction = function (timeStep) {
+        const surfNormalWS_scaled_proj = new Vec3();
+        const wheelInfos = this.wheelInfos;
+        const numWheels = wheelInfos.length;
+        const chassisBody = this.chassisBody;
+        const forwardWS = [];
+        const axle = [];
+        let numWheelsOnGround = 0;
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const groundObject = wheel.raycastResult.body;
+          if (groundObject) numWheelsOnGround++;
+          wheel.sideImpulse = 0;
+          wheel.forwardImpulse = 0;
+          forwardWS[i] = new Vec3();
+          axle[i] = new Vec3();
+        }
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const groundObject = wheel.raycastResult.body;
+          if (groundObject) {
+            const axlei = axle[i];
+            const wheelTrans = this.getWheelTransformWorld(i);
+            wheelTrans.vectorToWorldFrame(worldAxis[this.indexRightAxis], axlei);
+            const surfNormalWS = wheel.raycastResult.hitNormalWorld;
+            const proj = axlei.dot(surfNormalWS);
+            surfNormalWS.scale(proj, surfNormalWS_scaled_proj);
+            axlei.vsub(surfNormalWS_scaled_proj, axlei);
+            axlei.normalize();
+            surfNormalWS.cross(axlei, forwardWS[i]);
+            forwardWS[i].normalize();
+            wheel.sideImpulse = resolveSingleBilateral(
+              chassisBody,
+              wheel.raycastResult.hitPointWorld,
+              groundObject,
+              wheel.raycastResult.hitPointWorld,
+              axlei
+            );
+            wheel.sideImpulse *= 1;
+          }
+        }
+
+        const sideFactor = 1;
+        const fwdFactor = 0.5;
+        this.sliding = false;
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const groundObject = wheel.raycastResult.body;
+          let rollingFriction = 0;
+          wheel.slipInfo = 1;
+          if (groundObject) {
+            const defaultRollingFrictionImpulse = 0;
+            const maxImpulse = wheel.brake ? wheel.brake : defaultRollingFrictionImpulse;
+            rollingFriction = calcRollingFriction(
+              chassisBody,
+              groundObject,
+              wheel.raycastResult.hitPointWorld,
+              forwardWS[i],
+              maxImpulse,
+              numWheelsOnGround
+            );
+            rollingFriction += wheel.engineForce * timeStep;
+            const factor = maxImpulse / rollingFriction;
+            wheel.slipInfo *= factor;
+          }
+
+          wheel.forwardImpulse = 0;
+          wheel.skidInfo = 1;
+          if (groundObject) {
+            wheel.skidInfo = 1;
+            const maximp = wheel.suspensionForce * timeStep * wheel.frictionSlip;
+            const maximpSquared = maximp * maximp;
+            wheel.forwardImpulse = rollingFriction;
+            const x = wheel.forwardImpulse * fwdFactor;
+            const y = wheel.sideImpulse * sideFactor;
+            const impulseSquared = x * x + y * y;
+            wheel.sliding = false;
+            if (impulseSquared > maximpSquared) {
+              this.sliding = true;
+              wheel.sliding = true;
+              const factor = maximp / Math.sqrt(impulseSquared);
+              wheel.skidInfo *= factor;
+            }
+          }
+        }
+
+        if (this.sliding) {
+          for (let i = 0; i < numWheels; i++) {
+            const wheel = wheelInfos[i];
+            if (wheel.sideImpulse !== 0 && wheel.skidInfo < 1) {
+              wheel.forwardImpulse *= wheel.skidInfo;
+              wheel.sideImpulse *= wheel.skidInfo;
+            }
+          }
+        }
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const rel_pos = new Vec3();
+          rel_pos.copy(wheel.raycastResult.hitPointWorld);
+          if (wheel.forwardImpulse !== 0) {
+            const impulse = new Vec3();
+            forwardWS[i].scale(wheel.forwardImpulse, impulse);
+            chassisBody.applyImpulse(impulse, rel_pos);
+          }
+          if (wheel.sideImpulse !== 0) {
+            const groundObject = wheel.raycastResult.body;
+            const rel_pos2 = new Vec3();
+            rel_pos2.copy(wheel.raycastResult.hitPointWorld);
+            const sideImp = new Vec3();
+            axle[i].scale(wheel.sideImpulse, sideImp);
+            chassisBody.pointToLocalFrame(rel_pos, rel_pos);
+            rel_pos["xyz"[this.indexUpAxis]] *= wheel.rollInfluence;
+            chassisBody.pointToWorldFrame(rel_pos, rel_pos);
+            chassisBody.applyImpulse(sideImp, rel_pos);
+            sideImp.scale(-1, sideImp);
+            groundObject.applyImpulse(sideImp, rel_pos2);
+          }
+        }
+      };
+
+      CANNON.RaycastVehicle.prototype.addToWorld = function (world) {
+        world.addBody(this.chassisBody);
+        const that = this;
+        const fVec = new Vec3();
+        const relPos = new Vec3();
+        const tq = new Vec3();
+        const angImp = new Vec3();
+
+        this._suspensionSubsystem = {
+          update() {
+            const dt = world.dt;
+            const wheelInfos = that.wheelInfos;
+            const body = that.chassisBody;
+            if (body.sleepState === CANNON.Body.SLEEPING || !(body.type & CANNON.Body.DYNAMIC)) {
+              body.force.set(0, 0, 0);
+              body.torque.set(0, 0, 0);
+              body.velocity.set(0, 0, 0);
+              body.angularVelocity.set(0, 0, 0);
+              that._suspensionUpdatedThisStep = false;
+              return;
+            }
+            that._suspensionUpdatedThisStep = true;
+            for (let i = 0; i < wheelInfos.length; i++) {
+              that.updateWheelTransform(i);
+            }
+            that.currentVehicleSpeedKmHour = 3.6 * body.velocity.norm();
+            const forwardWorld = new Vec3();
+            that.getVehicleAxisWorld(that.indexForwardAxis, forwardWorld);
+            if (forwardWorld.dot(body.velocity) < 0) {
+              that.currentVehicleSpeedKmHour *= -1;
+            }
+            for (let i = 0; i < wheelInfos.length; i++) {
+              that.castRay(wheelInfos[i]);
+            }
+            that.updateSuspension(dt);
+            for (let i = 0; i < wheelInfos.length; i++) {
+              const wheel = wheelInfos[i];
+              let sForce = wheel.suspensionForce;
+              if (sForce > wheel.maxSuspensionForce) sForce = wheel.maxSuspensionForce;
+              wheel.raycastResult.hitNormalWorld.scale(sForce, fVec);
+              wheel.raycastResult.hitPointWorld.vsub(body.position, relPos);
+              body.force.vadd(fVec, body.force);
+              relPos.cross(fVec, tq);
+              body.torque.vadd(tq, body.torque);
+            }
+          }
+        };
+        world.subsystems.push(this._suspensionSubsystem);
+
+        this.preStepCallback = function () {
+          const dt = world.dt;
+          const wheelInfos = that.wheelInfos;
+          const body = that.chassisBody;
+          if (body.sleepState === CANNON.Body.SLEEPING || !(body.type & CANNON.Body.DYNAMIC)) {
+            body.force.set(0, 0, 0);
+            body.torque.set(0, 0, 0);
+            body.velocity.set(0, 0, 0);
+            body.angularVelocity.set(0, 0, 0);
+            return;
+          }
+          if (!that._suspensionUpdatedThisStep) {
+            that._suspensionSubsystem.update();
+          }
+
+          const invMassDt = body.invMass * dt;
+          body.velocity.x += body.force.x * invMassDt;
+          body.velocity.y += body.force.y * invMassDt;
+          body.velocity.z += body.force.z * invMassDt;
+          body.invInertiaWorld.vmult(body.torque, angImp);
+          angImp.mult(dt, angImp);
+          body.angularVelocity.vadd(angImp, body.angularVelocity);
+          body.force.set(0, 0, 0);
+          body.torque.set(0, 0, 0);
+
+          that.updateFriction(dt);
+
+          const hitNormalScaledWithProj = new Vec3();
+          const fwd = new Vec3();
+          const vel = new Vec3();
+          for (let i = 0; i < wheelInfos.length; i++) {
+            const wheel = wheelInfos[i];
+            body.getVelocityAtWorldPoint(wheel.chassisConnectionPointWorld, vel);
+            let m = 1;
+            if (that.indexUpAxis === 1) m = -1;
+            let proj2 = 0;
+            if (wheel.isInContact) {
+              that.getVehicleAxisWorld(that.indexForwardAxis, fwd);
+              const proj = fwd.dot(wheel.raycastResult.hitNormalWorld);
+              wheel.raycastResult.hitNormalWorld.scale(proj, hitNormalScaledWithProj);
+              fwd.vsub(hitNormalScaledWithProj, fwd);
+              proj2 = fwd.dot(vel);
+              wheel.deltaRotation = m * proj2 * dt / wheel.radius;
+            }
+            if ((wheel.sliding || !wheel.isInContact) && wheel.engineForce !== 0 && wheel.useCustomSlidingRotationalSpeed) {
+              wheel.deltaRotation = (wheel.engineForce > 0 ? 1 : -1) * wheel.customSlidingRotationalSpeed * dt;
+            }
+            if (Math.abs(wheel.brake) > Math.abs(wheel.engineForce) && Math.abs(proj2) < 0.05) {
+              wheel.deltaRotation = 0;
+            }
+            wheel.rotation += wheel.deltaRotation;
+            wheel.deltaRotation *= 0.99;
+          }
+        };
+        world.addEventListener("preStep", this.preStepCallback);
+        this.world = world;
+      };
+    }
+
+    installCannonFixesAC(window.CANNON);
+
+    class Log {
+      constructor(pace) {
+        this.pace = pace;
+        this.counter = 0;
+      }
+
+      Update() {
+        this.counter += this.pace;
+      }
+
+      LOG(msg) {
+        if (this.counter % 50 === 0)
+          console.log(this.counter, msg);
+      }
+    }
+
+    const logger = new Log(8);
+    const clock = new THREE.Clock();
+    const scenario = new Scenario();
+    const w900 = new KenworthW900();
+    const trunk_trailer = new TrunkTrailer();
+    const keyboardController = new KeyboardController();
+    const stopwatch = new Stopwatch(document.getElementById("stopwatch"));
+    let gameStarted = false;
+    let camera, world;
+    let level_manager;
+    let cannonDebugger;
+    let debugVisible = false;
+    const debugMeshes = [];
+
+    function initCannonDebugger() {
+      cannonDebugger = new CannonDebugger(scenario.scene, world, {
+        onInit(body, mesh) {
+          mesh.visible = debugVisible;
+          debugMeshes.push(mesh);
+        },
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key.toLowerCase() === 'd') {
+          debugVisible = !debugVisible;
+          if (debugVisible) {
+            cannonDebugger.update();
+          }
+          debugMeshes.forEach((m) => { m.visible = debugVisible; });
+        }
+      });
+    }
+
+    /**
+     * Função principal que inicializa e orquestra a criação do jogo.
+     */
+    function init() {
+      gameStarted = true;
+
+      world = new CANNON.World();
+      world.gravity.set(0, -9.82, 0);
+      world.broadphase = new CANNON.SAPBroadphase(world);
+      world.solver.iterations = 10
+      world.allowSleep = true;
+
+      const fifthWheelMaterial = new CANNON.Material('fifthWheelMaterial');
+      const kingPinMaterial = new CANNON.Material('kingPinMaterial');
+      const contactMaterial = new CANNON.ContactMaterial(fifthWheelMaterial, kingPinMaterial, {
+        friction: 0,
+        restitution: 0,
+      });
+      world.addContactMaterial(contactMaterial);
+
+      scenario.Initialize(world);
+      w900.Initialize({
+        world: world,
+        scene: scenario.scene,
+        alertOverlay: document.getElementById('alert-overlay'),
+        alertText: document.getElementById('alert-text'),
+        brakeIndicator: document.getElementById("parking-brake-indicator"),
+        speedometer: document.getElementById("speedometer"),
+        gameInfo: document.getElementById("game-info"),
+        fifthWheelMaterial: fifthWheelMaterial
+      });
+
+      trunk_trailer.Initialize({
+        world: world,
+        scene: scenario.scene,
+        kingPinMaterial: kingPinMaterial
+      });
+
+      camera = new CameraManager(window.innerWidth, window.innerHeight, w900);
+
+      setupControls();
+
+      const uiElements = {
+        infoPanel: document.getElementById('game-controls-info'),
+        infoTitle: document.getElementById('info-title'),
+        infoDescription: document.getElementById('info-description'),
+        attemptCounter: document.getElementById('attempt-counter'),
+        msgBox: document.getElementById('message-box'),
+        msgText: document.getElementById('message-text'),
+        actionButton: document.getElementById('action-button')
+      };
+      level_manager = new LevelManager(uiElements, camera, w900, trunk_trailer, keyboardController, scenario, stopwatch);
+      level_manager.setupLevel();
+
+      scenario.SetUpCollisions(level_manager);
+
+      initCannonDebugger();
+
+      animate();
+    }
+
+
+    /**
+     * Configura todos os listeners de eventos para controle.
+     */
+    function setupControls() {
+      document.addEventListener("keydown", (e) => {
+        keyboardController.HandleKeyDown(e);
+        if (e.key === "0") camera.SwitchTo("orbital");
+        if (e.key === "2") camera.SwitchTo("hood");
+        if (e.key === "3") camera.SwitchTo("roof");
+        if (e.key === "4") camera.SwitchTo("top");
+        if (e.key === "5") camera.SwitchTo("rear");
+        if (e.key === "6") camera.SwitchTo("left");
+        if (e.key === "7") camera.SwitchTo("right");
+        if (e.key.toLowerCase() === "t") EngageTruckTrailer();
+        if (e.key.toLowerCase() === "l" && !e.repeat) w900.toggleHeadlights();
+        if (e.key.toLowerCase() === "h") {
+          document.getElementById("game-controls-info").style.display = "block";
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          document.getElementById('alert-overlay').style.display = 'none';
+          const msgBox = document.getElementById('message-box');
+          const actionButton = document.getElementById('action-button');
+          if (msgBox && msgBox.style.display === 'block' && actionButton) {
+            actionButton.click();
+          }
+        }
+      });
+
+      document.addEventListener("keyup", (e) => {
+        keyboardController.HandleKeyUp(e);
+      });
+      document.addEventListener("mousedown", (e) => {
+        camera.MouseDown(e);
+      });
+      document.addEventListener("mouseup", (e) => {
+        camera.MouseUp(e);
+      });
+      document.addEventListener("mousemove", (e) => {
+        camera.MouseMove(e);
+      });
+      document.addEventListener("wheel", (e) => {
+        camera.MouseWheel(e);
+      });
+      document.getElementById("close-info-button").addEventListener("click", () => {
+        document.getElementById("game-controls-info").style.display = "none";
+      });
+      document.getElementById("close-top-info-button").addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+      });
+      document.getElementById("close-top-info-button").addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.getElementById("top-info-panel").style.display = "none";
+      });
+      document.getElementById("help-button").addEventListener("click", () => {
+        document.getElementById("game-controls-info").style.display = "block";
+      });
+      document.getElementById('alert-close-button').addEventListener('click', () => {
+        document.getElementById('alert-overlay').style.display = 'none';
+      });
+
+      document.getElementById('parking-brake-indicator').addEventListener('click', () => {
+        keyboardController.switchParkingBreak();
+      });
+    }
+
+
+    /**
+     * Lida com a movimentação do veículo baseada nas teclas pressionadas.
+     */
+    function handleVehicleControls(deltaTime) {
+      w900.setSteering(keyboardController.getSteering(deltaTime));
+      w900.setParkingBrake(keyboardController.parkingBrakeOn);
+      const isMoving = w900.isMoving();
+      w900.Brake(keyboardController.getBrake(isMoving));
+      w900.Throttle(keyboardController.getThrottle(isMoving));
+    }
+
+    function EngageTruckTrailer() {
+      w900.EngageTrailer(trunk_trailer);
+    }
+
+
+    /**
+     * O loop principal de animação e lógica do jogo.
+     */
+    function animate() {
+      const deltaTime = clock.getDelta();
+      if (!level_manager.Ended()) {
+        handleVehicleControls(deltaTime);
+        level_manager.checkSuccess();
+        world.step(1 / 60, deltaTime);
+        w900.Update();
+        trunk_trailer.Update();
+      }
+
+      requestAnimationFrame(animate);
+
+      if (debugVisible) {
+        cannonDebugger.update();
+      }
+
+      camera.Update();
+      scenario.Update(camera.Get());
+      logger.Update();
+    }
+
+
+    // --- INICIAR JOGO ---
+    window.addEventListener("resize", () => {
+      if (!gameStarted) return;
+      camera.Resize(window.innerWidth, window.innerHeight);
+      scenario.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    window.onload = () => {
+      const startButton = document.getElementById('start-game-button');
+      const startScreen = document.getElementById('start-screen');
+      const gameContainer = document.getElementById('game-container');
+      startButton.addEventListener('click', () => {
+        startScreen.style.display = 'none';
+        gameContainer.style.display = 'block';
+        init();
+      });
+    };
+  </script>
+</body>
+
+</html>
