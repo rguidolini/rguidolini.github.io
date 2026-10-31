@@ -13,6 +13,7 @@ export class Scenario {
         this.warehouseBody = null;
 
         this.scene.background = new THREE.Color(0x87ceeb);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -443,3 +444,4 @@ function createProceduralEnvironment(renderer) {
 
     return renderTarget.texture;
 }
+

@@ -25,6 +25,23 @@ export class KeyboardController {
         }
     }
 
+    setVirtualKey(key, isDown) {
+        if (this.keys.hasOwnProperty(key)) {
+            this.keys[key] = Boolean(isDown);
+        }
+        if (!isDown && (key === "ArrowUp" || key === "ArrowDown")) {
+            this.brakeDirection = 0;
+        }
+    }
+
+    resetVirtualKeys() {
+        this.keys.ArrowUp = false;
+        this.keys.ArrowDown = false;
+        this.keys.ArrowLeft = false;
+        this.keys.ArrowRight = false;
+        this.brakeDirection = 0;
+    }
+
     /**
      * Controls steering wheel based on keyboard input.
      * Returns a percentage of the steering wheel to be turned. -1 for left, 1 for right.

@@ -13,7 +13,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
  *  - Eixo Z: Longitudinal (+Z = Frente, -Z = Traseira; eixo dianteiro em Z = +3.21,
  *            eixos de tração em Z = -2.15 e Z = -3.25, 5ª roda em Z = -2.87).
  */
-export function KenworthW900Visual() {
+export function KenworthW900Visual(wheelMeshes = []) {
     const mats = createW900Materials();
     const masterGroup = new THREE.Group();
 
@@ -184,13 +184,10 @@ export function KenworthW900Visual() {
     };
     rebuildAirCleaners();
 
-    // Escapamentos Verticais Duplos de 8" (Monster Stacks) com Protetor Térmico e Ponteiras (subgrupo individual)
-    const stacksRaw = new THREE.Group();
+    // Escapamentos Verticais Duplos de 8" (Monster Stacks) com Protetor Térmico e Ponteiras
     const stacksGroup = buildMonsterExhaustStacks(mats);
     stacksGroup.position.z = zShift;
-    stacksRaw.add(stacksGroup);
-    stacksRaw.position.y = -0.76;
-    const bakedExhaustStacks = bakeStaticMeshesByMaterial(stacksRaw);
+    othersRaw.add(stacksGroup);
 
     // Caixas de Bateria com Degraus Duplos e Tanques Cilíndricos de Alumínio Polido
     othersRaw.add(buildStepsAndFuelTanks(mats, zShift));
@@ -219,7 +216,6 @@ export function KenworthW900Visual() {
     othersGroup.add(bakedHeadlights);
     othersGroup.add(bakedCatwalkPlate);
     othersGroup.add(bakedAirCleaners);
-    othersGroup.add(bakedExhaustStacks);
     othersGroup.add(bakedRearTaillights);
     masterGroup.add(othersGroup);
 
@@ -230,18 +226,11 @@ export function KenworthW900Visual() {
         bakedNucleo,
         bakedSleeper,
         bakedChassis,
-        bakedFifthWheel,
-        bakedHeadlightPods,
-        bakedHeadlights,
+        wheelMeshes,
         bakedCatwalkPlate,
-        bakedAirCleaners,
-        bakedExhaustStacks,
         bakedRearTaillights,
-        rebuildFifthWheel,
         rebuildHeadlights,
-        rebuildNucleo,
-        rebuildSleeper,
-        rebuildAirCleaners
+        rebuildNucleo
     });
 
     // Controle dinâmico de iluminação em ciclo de 3 estados (tecla 'L'):
@@ -3817,18 +3806,11 @@ function mountStructureVisibilityUI({
     bakedNucleo,
     bakedSleeper,
     bakedChassis,
-    bakedFifthWheel,
-    bakedHeadlightPods,
-    bakedHeadlights,
+    wheelMeshes,
     bakedCatwalkPlate,
-    bakedAirCleaners,
-    bakedExhaustStacks,
     bakedRearTaillights,
-    rebuildFifthWheel,
     rebuildHeadlights,
-    rebuildNucleo,
-    rebuildSleeper,
-    rebuildAirCleaners
+    rebuildNucleo
 }) {
     if (typeof document === 'undefined') return;
     const existing = document.getElementById('structure-visibility-panel');
@@ -3978,23 +3960,25 @@ function mountStructureVisibilityUI({
     subRow.appendChild(makeSubToggle('Núcleo', bakedNucleo));
     subRow.appendChild(makeSubToggle('Sleeper', bakedSleeper));
     subRow.appendChild(makeSubToggle('Chassi', bakedChassis));
-    if (bakedFifthWheel) {
-        subRow.appendChild(makeSubToggle('Quinta Roda', bakedFifthWheel));
-    }
-    if (bakedHeadlightPods) {
-        subRow.appendChild(makeSubToggle('Cx. Faróis', bakedHeadlightPods));
-    }
-    if (bakedHeadlights) {
-        subRow.appendChild(makeSubToggle('Faróis', bakedHeadlights));
-    }
-    if (bakedCatwalkPlate) {
-        subRow.appendChild(makeSubToggle('Chapa', bakedCatwalkPlate));
-    }
-    if (bakedAirCleaners) {
-        subRow.appendChild(makeSubToggle('Filtro de Ar', bakedAirCleaners));
-    }
-    if (bakedExhaustStacks) {
-        subRow.appendChild(makeSubToggle('Descarga', bakedExhaustStacks));
+    if (Array.isArray(wheelMeshes)) {
+        const lbl = document.createElement('label');
+        Object.assign(lbl.style, {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            cursor: 'pointer'
+        });
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = true;
+        chk.addEventListener('change', () => {
+            wheelMeshes.forEach(m => {
+                if (m) m.visible = chk.checked;
+            });
+        });
+        lbl.appendChild(chk);
+        lbl.appendChild(document.createTextNode('Rodas/Pneus'));
+        subRow.appendChild(lbl);
     }
     panel.appendChild(subRow);
 
@@ -6693,7 +6677,9 @@ function buildMonsterExhaustStacks(mats) {
 
     const radialSegs = 24;
     const curveSteps = 14;
-    const yPipeBot = 0.72;             // Tubo desce reto abaixo da proteção antes da curva inferior (entre bateria e tanque)
+    const elbowR = 0.18;               // Raio do joelho inferior (curvando para dentro do caminhão em direção ao chassi)
+    const alturaBase = 0.70;           // Altura Y da face inferior do cano ao solo (0.70m -> yPipeBot = 0.952m)
+    const yPipeBot = alturaBase + elbowR + stackR; // Tubo desce reto abaixo da proteção antes da curva inferior
     const yBendStart = 3.28 + 0.50;    // 3.78m (+50 cm na altura dos escapamentos)
     const bendRadius = 0.32;           // Raio de curvatura do eixo da ponteira proporcional ao novo diâmetro
     const bendAngle = 0.96;            // Ângulo da curva (~55°)
@@ -6729,7 +6715,6 @@ function buildMonsterExhaustStacks(mats) {
 
         const z0_val = (r, cosP, sinP) => zStack + r * (cosP * n0z + sinP * bz);
 
-        const elbowR = 0.18; // Raio do joelho inferior (curvando para dentro do caminhão em direção ao chassi)
         const elbowSteps = 10;
         const makeLowerElbowRing = (alpha, r, extraInwardX = 0) => {
             const ring = [];

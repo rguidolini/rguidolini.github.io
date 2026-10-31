@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import { TireWheelSet } from './wheel.js';
 import { KenworthW900Visual } from './kenworth_w900_visual.js';
+import { W900EngineSound } from './engine_sound.js';
 
 export class KenworthW900 {
     Initialize(params) {
         this.parkingBrakeOn = null;
+        this._suppressBrakeHiss = false;
+        this.currentThrottle = 0;
+        this.currentBrake = 0;
         this.lightingState = 0; // 0: apagado, 1: luzes de posição, 2: faróis
         this.lastSpeedKmh = -1;
         this.warningTimeout = null;
@@ -16,6 +20,8 @@ export class KenworthW900 {
         this.chassisMesh;
         this.wheelMeshes = [];
         this.trailer = null;
+        this.engineSound = new W900EngineSound();
+        this.engineSound.start();
 
         // 1. Física do Veículo
         const chassisBody = new CANNON.Body({
@@ -50,7 +56,7 @@ export class KenworthW900 {
 
         // Modelo Visual do Caminhao
         this.chassisMesh = new THREE.Group();
-        const truckModel = KenworthW900Visual();
+        const truckModel = KenworthW900Visual(this.wheelMeshes);
         this.truckModel = truckModel;
         this.chassisMesh.add(truckModel);
 
@@ -93,6 +99,7 @@ export class KenworthW900 {
     * Returns 
     */
     Throttle(powerFraction) {
+        this.currentThrottle = powerFraction;
         this.reverseThrottle = powerFraction < 0;
         this.setReverseLights(this.reverseThrottle || this.isMoving() < 0);
         if (powerFraction != 0) {
@@ -147,7 +154,15 @@ export class KenworthW900 {
         return this.lightingState;
     }
 
+    toggleEngineSound() {
+        if (!this.engineSound) return false;
+        const muted = this.engineSound.toggleMute();
+        this.showinfo(muted ? "🔇 Engine sound muted" : "🔊 Engine sound enabled");
+        return muted;
+    }
+
     Brake(breakFraction) {
+        this.currentBrake = breakFraction;
         this.setBrakeLights(breakFraction !== 0);
         if (breakFraction !== 0) {
             this.vehicle.chassisBody.allowSleep = true;
@@ -162,8 +177,12 @@ export class KenworthW900 {
     }
 
     setParkingBrake(isOn) {
+        const wasInitialized = this.parkingBrakeOn !== null;
         const changed = this.parkingBrakeOn !== isOn;
         this.parkingBrakeOn = isOn;
+        if (changed && wasInitialized && !this._suppressBrakeHiss && this.engineSound) {
+            this.engineSound.triggerAirBrakeHiss(isOn ? 0.85 : 1.0);
+        }
         const maxParkingBrakeForce = 50;
         const force = isOn ? maxParkingBrakeForce : 0;
         if (isOn) {
@@ -279,9 +298,14 @@ export class KenworthW900 {
 
     freeze() {
         this.frozen = true;
+        this.currentThrottle = 0;
+        this.currentBrake = 0;
         this.reverseThrottle = false;
         this.setBrakeLights(false);
         this.setReverseLights(false);
+        if (this.engineSound) {
+            this.engineSound.setFrozen(true);
+        }
         this.vehicle.chassisBody.type = CANNON.Body.STATIC;
         this.vehicle.chassisBody.velocity.set(0, 0, 0);
         this.vehicle.chassisBody.angularVelocity.set(0, 0, 0);
@@ -300,6 +324,8 @@ export class KenworthW900 {
 
     reset(x, y, z, angle) {
         this.frozen = false;
+        this.currentThrottle = 0;
+        this.currentBrake = 0;
         this.UnhitchTrailer();
         this.reverseThrottle = false;
         this.setBrakeLights(false);
@@ -310,7 +336,12 @@ export class KenworthW900 {
             this.vehicle.wheelInfos[i].deltaRotation = 0;
         }
         this.vehicle.chassisBody.type = CANNON.Body.DYNAMIC;
+        this._suppressBrakeHiss = true;
         this.setParkingBrake(true);
+        this._suppressBrakeHiss = false;
+        if (this.engineSound) {
+            this.engineSound.setFrozen(false);
+        }
         this.vehicle.chassisBody.wakeUp();
         this.vehicle.chassisBody.allowSleep = true;
         this.vehicle.chassisBody.velocity.set(0, 0, 0);
@@ -327,7 +358,10 @@ export class KenworthW900 {
             return;
         }
         if (this.trailer) {
-            if (this.UnhitchTrailer()) this.showinfo("Trailer successfully unhitched");
+            if (this.UnhitchTrailer()) {
+                if (this.engineSound) this.engineSound.triggerAirBrakeHiss(0.55);
+                this.showinfo("Trailer successfully unhitched");
+            }
             return;
         }
         const fifthWheelPosition = new CANNON.Vec3();
@@ -349,6 +383,7 @@ export class KenworthW900 {
         this.params.world.addConstraint(this.constraint);
         trailer.Engage();
         this.trailer = trailer;
+        if (this.engineSound) this.engineSound.triggerAirBrakeHiss(0.6);
         this.showinfo("Trailer successfully hitched");
     }
 
@@ -366,7 +401,7 @@ export class KenworthW900 {
         return this.trailer !== null;
     }
 
-    Update() {
+    Update(deltaTime) {
         if (this.frozen) {
             for (let i = 0; i < this.vehicle.wheelInfos.length; i++) {
                 this.vehicle.wheelInfos[i].deltaRotation = 0;
@@ -383,7 +418,18 @@ export class KenworthW900 {
 
         this.setReverseLights(Boolean(this.reverseThrottle) || this.isMoving() < 0);
 
-        const speedKmh = Math.floor(Math.abs(this.GetSpeed()) * 3.6);
+        const currentSpeedMs = this.GetSpeed();
+        if (this.engineSound) {
+            this.engineSound.update(deltaTime, {
+                speedMs: currentSpeedMs,
+                throttle: this.currentThrottle,
+                brake: this.currentBrake,
+                parkingBrakeOn: Boolean(this.parkingBrakeOn),
+                hasTrailer: this.HasTrailer()
+            });
+        }
+
+        const speedKmh = Math.floor(Math.abs(currentSpeedMs) * 3.6);
         if (speedKmh !== this.lastSpeedKmh) {
             this.lastSpeedKmh = speedKmh;
             this.params.speedometer.innerText = `${speedKmh} km/h`;

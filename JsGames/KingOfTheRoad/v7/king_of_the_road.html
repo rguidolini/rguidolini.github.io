@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>King of The Road</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
@@ -264,6 +264,395 @@
     #alert-close-button:hover {
       background-color: #e74c3c;
     }
+
+    /* --- SUPORTE AUTOMÁTICO MOBILE / TOUCH --- */
+    button,
+    #help-button,
+    #close-info-button,
+    #close-top-info-button,
+    #parking-brake-indicator {
+      touch-action: manipulation;
+    }
+
+    body.is-mobile {
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body.is-mobile:active {
+      cursor: default;
+    }
+
+    body.is-mobile #start-screen {
+      height: 100dvh;
+      padding: 18px 16px calc(28px + env(safe-area-inset-bottom, 0px));
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    body.is-mobile #start-screen h1 {
+      font-size: 2.25rem;
+      line-height: 1.15;
+    }
+
+    body.is-mobile #game-container {
+      position: fixed;
+      inset: 0;
+      touch-action: none;
+    }
+
+    body.is-mobile #game-container canvas {
+      touch-action: none;
+    }
+
+    /* HUD compacto no celular para liberar visão e área dos polegares */
+    body.is-mobile #help-button {
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      left: calc(8px + env(safe-area-inset-left, 0px));
+      width: 38px;
+      height: 38px;
+      line-height: 38px;
+      font-size: 20px;
+      z-index: 25;
+    }
+
+    body.is-mobile #top-info-panel {
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      left: calc(52px + env(safe-area-inset-left, 0px));
+      right: calc(108px + env(safe-area-inset-right, 0px));
+      transform: none;
+      padding: 6px 26px 6px 10px;
+      border-radius: 10px;
+      z-index: 22;
+    }
+
+    body.is-mobile #info-title {
+      font-size: 0.85rem;
+      line-height: 1.15;
+      margin-bottom: 2px;
+    }
+
+    body.is-mobile #info-description {
+      font-size: 0.72rem;
+      line-height: 1.15;
+    }
+
+    body.is-mobile #close-top-info-button {
+      top: 5px;
+      right: 5px;
+      width: 20px;
+      height: 20px;
+    }
+
+    body.is-mobile #top-dash {
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      right: calc(8px + env(safe-area-inset-right, 0px));
+      min-width: 94px;
+      padding: 5px 8px;
+      font-size: 0.78rem !important;
+      line-height: 1.25;
+      border-radius: 10px;
+      z-index: 22;
+    }
+
+    body.is-mobile #speedometer {
+      top: calc(54px + env(safe-area-inset-top, 0px));
+      bottom: auto;
+      right: calc(8px + env(safe-area-inset-right, 0px));
+      min-width: 94px;
+      padding: 4px 8px;
+      font-size: 0.92rem;
+      border-radius: 10px;
+      z-index: 22;
+    }
+
+    body.is-mobile #parking-brake-indicator {
+      display: none !important;
+    }
+
+    body.is-mobile #game-controls-info {
+      top: calc(52px + env(safe-area-inset-top, 0px));
+      left: calc(10px + env(safe-area-inset-left, 0px));
+      max-width: min(300px, 88vw);
+      z-index: 35;
+    }
+
+    body.is-mobile #alert-panel {
+      top: calc(58px + env(safe-area-inset-top, 0px));
+      bottom: auto;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 12px;
+      align-items: center;
+      z-index: 32;
+    }
+
+    body.is-mobile #alert-text {
+      font-size: 0.92rem;
+    }
+
+    body.is-mobile #message-box {
+      top: 50%;
+      bottom: auto;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px 18px;
+      font-size: 1.35rem;
+      width: min(420px, 90vw);
+      z-index: 40;
+    }
+
+    /* Bloqueio de orientação para modo horizontal (landscape) apenas em dispositivos móveis */
+    #rotate-device-overlay {
+      display: none;
+    }
+
+    @keyframes tiltPhoneLandscape {
+      0%, 20% { transform: rotate(0deg); }
+      55%, 85% { transform: rotate(-90deg); }
+      100% { transform: rotate(0deg); }
+    }
+
+    .rotate-phone-icon {
+      font-size: 3.4rem;
+      line-height: 1;
+      display: inline-block;
+      animation: tiltPhoneLandscape 2.4s ease-in-out infinite;
+    }
+
+    @media (orientation: portrait) {
+      body.is-mobile #rotate-device-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 28px;
+        background: rgba(15, 23, 42, 0.97);
+        color: #f8fafc;
+        text-align: center;
+        touch-action: none;
+      }
+    }
+
+    /* Controles de toque na borda inferior (visíveis apenas quando MobileControls ativa isMobile) */
+    #mobile-controls-root {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    #mobile-action-wrap {
+      position: absolute;
+      top: auto;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: center;
+      gap: 6px;
+      max-width: 96vw;
+      pointer-events: auto;
+    }
+
+    #mobile-action-bar {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 6px;
+      background: rgba(12, 16, 22, 0.72);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+
+    .mob-action-btn {
+      background: rgba(255, 255, 255, 0.1);
+      color: #f3f4f6;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .mob-action-btn:active {
+      transform: scale(0.95);
+    }
+
+    .mob-action-btn.is-danger-active {
+      background: rgba(215, 38, 38, 0.92);
+      border-color: rgba(255, 190, 190, 0.85);
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.65);
+    }
+
+    .mob-action-btn.is-ok-active {
+      background: rgba(22, 163, 74, 0.9);
+      border-color: rgba(187, 247, 208, 0.8);
+      color: #ffffff;
+    }
+
+    .mob-action-btn.is-warn-active {
+      background: rgba(234, 179, 8, 0.9);
+      border-color: rgba(254, 240, 138, 0.85);
+      color: #111827;
+    }
+
+    #mobile-cam-drawer {
+      display: none;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 8px;
+      background: rgba(12, 16, 22, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+      max-width: 92vw;
+    }
+
+    .mob-cam-pill {
+      background: rgba(255, 255, 255, 0.12);
+      color: #e5e7eb;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.74rem;
+      font-weight: 600;
+    }
+
+    .mob-cam-pill.is-cam-selected {
+      background: #ffd600;
+      color: #111827;
+      border-color: #fde047;
+      font-weight: 700;
+    }
+
+    #mobile-steer-pad {
+      position: absolute;
+      left: calc(12px + env(safe-area-inset-left, 0px));
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      width: 142px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    #mobile-pedal-pad {
+      position: absolute;
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      width: 142px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .mob-drive-btn {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(17, 24, 39, 0.68);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      color: #ffffff;
+      border: 2px solid rgba(255, 255, 255, 0.34);
+      border-radius: 18px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+      transition: transform 0.06s ease, background-color 0.08s ease, border-color 0.08s ease;
+    }
+
+    .mob-steer-btn {
+      height: 68px;
+      font-size: 1.7rem;
+      font-weight: 700;
+    }
+
+    .mob-brake-btn {
+      height: 66px;
+      background: rgba(127, 29, 29, 0.68);
+      border-color: rgba(252, 165, 165, 0.45);
+    }
+
+    .mob-gas-btn {
+      height: 80px;
+      background: rgba(20, 83, 45, 0.68);
+      border-color: rgba(134, 239, 172, 0.45);
+    }
+
+    .mob-pedal-arrow {
+      font-size: 1.35rem;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    .mob-pedal-label {
+      font-size: 0.66rem;
+      letter-spacing: 0.05em;
+      font-weight: 700;
+      opacity: 0.92;
+      margin-top: 3px;
+    }
+
+    .mob-drive-btn.is-pressed {
+      transform: scale(0.93);
+      background: rgba(255, 214, 0, 0.88);
+      color: #111827;
+      border-color: #ffffff;
+      box-shadow: 0 2px 10px rgba(255, 214, 0, 0.5);
+    }
+
+    /* Ajuste fino para celular na horizontal (landscape de altura reduzida) */
+    @media (orientation: landscape) and (max-height: 540px) {
+      body.is-mobile #top-info-panel {
+        max-width: 360px;
+        margin: 0 auto;
+        padding: 4px 24px 4px 10px;
+      }
+
+      body.is-mobile .mob-steer-btn {
+        height: 60px;
+      }
+
+      body.is-mobile .mob-brake-btn {
+        height: 58px;
+      }
+
+      body.is-mobile .mob-gas-btn {
+        height: 70px;
+      }
+    }
+
+    /* Telas horizontais muito compactas */
+    @media (orientation: landscape) and (max-width: 650px) {
+      #mobile-steer-pad,
+      #mobile-pedal-pad {
+        width: 120px;
+        gap: 6px;
+      }
+
+      .mob-action-btn {
+        padding: 5px 7px;
+        font-size: 0.68rem;
+      }
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -271,6 +660,18 @@
 </head>
 
 <body>
+  <div id="rotate-device-overlay" aria-live="polite">
+    <div class="rotate-phone-icon">📱</div>
+    <h2 class="text-2xl font-bold" style="color: #ffd600;">Gire o celular para a horizontal</h2>
+    <p class="text-sm text-gray-300 max-w-xs">
+      Posicione o aparelho na horizontal (modo paisagem) para jogar com todos os controles na parte inferior da tela.
+    </p>
+    <button id="force-landscape-btn" type="button" style="display: none;"
+      class="mt-2 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-2.5 px-5 rounded-full text-sm shadow-lg">
+      ⛶ Tela Cheia Horizontal
+    </button>
+  </div>
+
   <div id="start-screen"
     class="absolute top-0 left-0 w-full h-full bg-gray-800 bg-opacity-95 flex flex-col items-center text-white p-8 z-50 text-center">
     <div class="max-w-3xl" style="margin: auto;">
@@ -281,7 +682,7 @@
         world. And it all starts here. In this yard, your only opponents are the clock and your last attempt. With each
         new "load" you fit into this slot, you become experienced, faster, wiser.</p>
       <p class="mb-8">Ready for the next one?</p>
-      <div
+      <div id="desktop-controls-guide"
         class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10 text-left bg-gray-900 bg-opacity-50 p-6 rounded-lg border border-gray-700">
         <div>
           <h2 class="text-2xl font-bold mb-3">Vehicle Controls</h2>
@@ -291,8 +692,9 @@
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">←</kbd> Turn left</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">→</kbd> Turn right</li>
             <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">Space</kbd> Parking brake</li>
-            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">L</kbd> Ligth modes</li>
-            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">T</kbd> Hitch trailer</li>          
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">T</kbd> Hitch trailer</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">L</kbd> Lights</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">M</kbd> Mute engine</li>
           </ul>
 
           <span>&nbsp;</span>
@@ -312,6 +714,28 @@
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">5</kbd> Rear cam</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">6</kbd> Left wheel cam</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">7</kbd> Right wheel cam</li>
+          </ul>
+        </div>
+      </div>
+      <div id="mobile-controls-guide" style="display: none;"
+        class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8 text-left bg-gray-900 bg-opacity-50 p-5 rounded-lg border border-gray-700">
+        <div>
+          <h2 class="text-xl font-bold mb-3">Touch Driving</h2>
+          <ul class="space-y-2 text-sm">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">◄ / ►</kbd> Left thumb steering (slide supported)</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">▲ GO</kbd> Forward / Brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">▼ REV</kbd> Reverse / Brake</li>
+            <li><kbd class="font-bold bg-red-700 px-2 py-1 rounded">(P)</kbd> Release / engage parking brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">🔗 Hitch</kbd> Hitch or unhitch trailer</li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-3">Touch Camera &amp; Quick Bar</h2>
+          <ul class="space-y-2 text-sm">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">1 Finger</kbd> Drag screen to orbit camera</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">2 Fingers</kbd> Pinch screen to zoom</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">📷 Cam</kbd> Switch camera views</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">💡 / 🔊 / ⛶</kbd> Lights, Engine sound &amp; Fullscreen</li>
           </ul>
         </div>
       </div>
@@ -335,18 +759,33 @@
       <div class="text-left text-sm">
         <h1 class="text-xl font-bold mb-1">Controls</h1>
         <hr class="border-gray-600 my-2" />
-        <p><span class="font-bold">Arrows:</span> Move the truck</p>
-        <p><span class="font-bold">Space:</span> Park brake</p>
-        <p><span class="font-bold">T:</span> Hitch trailer</p>
-        <p><span class="font-bold">Mouse:</span> Move Cam </p>
-        <p><span class="font-bold">Scroll:</span> Zoom</p>
-        <p><span class="font-bold">0:</span> Free cam</p>
-        <p><span class="font-bold">2:</span> Hood cam</p>
-        <p><span class="font-bold">3:</span> Roof cam</p>
-        <p><span class="font-bold">4:</span> Top cam</p>
-        <p><span class="font-bold">5:</span> Rear cam</p>
-        <p><span class="font-bold">6:</span> Left wheel cam</p>
-        <p><span class="font-bold">7:</span> Right wheel cam</p>
+        <div id="desktop-help-list">
+          <p><span class="font-bold">Arrows:</span> Move the truck</p>
+          <p><span class="font-bold">Space:</span> Park brake</p>
+          <p><span class="font-bold">T:</span> Hitch trailer</p>
+          <p><span class="font-bold">L:</span> Lights</p>
+          <p><span class="font-bold">M:</span> Mute engine</p>
+          <p><span class="font-bold">Mouse:</span> Move Cam </p>
+          <p><span class="font-bold">Scroll:</span> Zoom</p>
+          <p><span class="font-bold">0:</span> Free cam</p>
+          <p><span class="font-bold">2:</span> Hood cam</p>
+          <p><span class="font-bold">3:</span> Roof cam</p>
+          <p><span class="font-bold">4:</span> Top cam</p>
+          <p><span class="font-bold">5:</span> Rear cam</p>
+          <p><span class="font-bold">6:</span> Left wheel cam</p>
+          <p><span class="font-bold">7:</span> Right wheel cam</p>
+        </div>
+        <div id="mobile-help-list" style="display: none;">
+          <p><span class="font-bold">◄ / ►:</span> Steer left / right</p>
+          <p><span class="font-bold">▲ GO:</span> Forward / Brake</p>
+          <p><span class="font-bold">▼ REV:</span> Reverse / Brake</p>
+          <p><span class="font-bold">(P):</span> Release / lock park brake</p>
+          <p><span class="font-bold">🔗 Hitch:</span> Hitch / unhitch trailer</p>
+          <p><span class="font-bold">📷 Cam:</span> Switch camera views</p>
+          <p><span class="font-bold">💡 / 🔊:</span> Lights / Engine sound</p>
+          <p><span class="font-bold">1 Finger:</span> Orbit free camera</p>
+          <p><span class="font-bold">2 Fingers:</span> Pinch to zoom</p>
+        </div>
       </div>
     </div>
 
@@ -400,6 +839,13 @@
     import { KenworthW900 } from './kenworth_w900.js';
     import { TrunkTrailer } from './trunk_trailer.js';
     import { Stopwatch } from './stopwatch.js';
+    import {
+      MobileControls,
+      detectMobileDevice,
+      adaptStartScreenForDevice,
+      tryLockLandscape,
+      enterFullscreenLandscape
+    } from './mobile_controls.js';
     import CannonDebugger from 'cannon-es-debugger'
 
     /**
@@ -714,6 +1160,8 @@
     let gameStarted = false;
     let camera, world;
     let level_manager;
+    let mobileControls = null;
+    let wasLevelEnded = false;
     let cannonDebugger;
     let debugVisible = false;
     const debugMeshes = [];
@@ -778,6 +1226,17 @@
 
       setupControls();
 
+      mobileControls = new MobileControls({
+        keyboardController: keyboardController,
+        camera: camera,
+        truck: w900,
+        canvas: scenario.renderer.domElement,
+        onHitch: EngageTruckTrailer
+      });
+      if (document.body.classList.contains('is-mobile') && !mobileControls.isMobile) {
+        mobileControls.setMobileActive(true);
+      }
+
       const uiElements = {
         infoPanel: document.getElementById('game-controls-info'),
         infoTitle: document.getElementById('info-title'),
@@ -789,6 +1248,7 @@
       };
       level_manager = new LevelManager(uiElements, camera, w900, trunk_trailer, keyboardController, scenario, stopwatch);
       level_manager.setupLevel();
+      mobileControls.syncHUD();
 
       scenario.SetUpCollisions(level_manager);
 
@@ -803,6 +1263,7 @@
      */
     function setupControls() {
       document.addEventListener("keydown", (e) => {
+        if (w900.engineSound) w900.engineSound.resume();
         keyboardController.HandleKeyDown(e);
         if (e.key === "0") camera.SwitchTo("orbital");
         if (e.key === "2") camera.SwitchTo("hood");
@@ -813,6 +1274,7 @@
         if (e.key === "7") camera.SwitchTo("right");
         if (e.key.toLowerCase() === "t") EngageTruckTrailer();
         if (e.key.toLowerCase() === "l" && !e.repeat) w900.toggleHeadlights();
+        if (e.key.toLowerCase() === "m" && !e.repeat) w900.toggleEngineSound();
         if (e.key.toLowerCase() === "h") {
           document.getElementById("game-controls-info").style.display = "block";
         }
@@ -831,6 +1293,7 @@
         keyboardController.HandleKeyUp(e);
       });
       document.addEventListener("mousedown", (e) => {
+        if (w900.engineSound) w900.engineSound.resume();
         camera.MouseDown(e);
       });
       document.addEventListener("mouseup", (e) => {
@@ -887,11 +1350,19 @@
     function animate() {
       const deltaTime = clock.getDelta();
       if (!level_manager.Ended()) {
+        wasLevelEnded = false;
         handleVehicleControls(deltaTime);
         level_manager.checkSuccess();
         world.step(1 / 60, deltaTime);
-        w900.Update();
+        w900.Update(deltaTime);
         trunk_trailer.Update();
+        if (mobileControls) mobileControls.syncHUD();
+      } else if (!wasLevelEnded) {
+        wasLevelEnded = true;
+        if (mobileControls) {
+          mobileControls.releaseAllInputs();
+          mobileControls.syncHUD();
+        }
       }
 
       requestAnimationFrame(animate);
@@ -907,20 +1378,51 @@
 
 
     // --- INICIAR JOGO ---
-    window.addEventListener("resize", () => {
+    function handleViewportResize() {
       if (!gameStarted) return;
+      scenario.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       camera.Resize(window.innerWidth, window.innerHeight);
       scenario.renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener("resize", handleViewportResize);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(handleViewportResize, 120);
     });
 
+    adaptStartScreenForDevice(detectMobileDevice());
+
     window.onload = () => {
+      adaptStartScreenForDevice(detectMobileDevice());
+      const forceLandscapeBtn = document.getElementById('force-landscape-btn');
+      if (
+        forceLandscapeBtn &&
+        document.documentElement &&
+        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)
+      ) {
+        forceLandscapeBtn.style.display = 'inline-block';
+        forceLandscapeBtn.addEventListener('click', () => {
+          enterFullscreenLandscape();
+        });
+      }
+
+      window.addEventListener('touchstart', () => {
+        if (!document.body.classList.contains('is-mobile')) {
+          adaptStartScreenForDevice(true);
+        }
+      }, { passive: true, once: true });
+
       const startButton = document.getElementById('start-game-button');
       const startScreen = document.getElementById('start-screen');
       const gameContainer = document.getElementById('game-container');
       startButton.addEventListener('click', () => {
+        if (gameStarted) return;
+        if (document.body.classList.contains('is-mobile')) {
+          tryLockLandscape();
+        }
         startScreen.style.display = 'none';
         gameContainer.style.display = 'block';
         init();
+        if (w900.engineSound) w900.engineSound.resume();
       });
     };
   </script>

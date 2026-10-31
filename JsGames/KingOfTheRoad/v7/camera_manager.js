@@ -191,6 +191,21 @@ class OrbitalCamera extends Camera {
         if (this.onUiSync) this.onUiSync();
     }
 
+    OrbitBy(deltaTheta, deltaPhi) {
+        if (this.staticMode) return;
+        this.cameraTheta += deltaTheta;
+        this.cameraPhi += deltaPhi;
+        this.clampAngles();
+        if (this.onUiSync) this.onUiSync();
+    }
+
+    ZoomByScale(scaleFactor) {
+        if (this.staticMode) return;
+        this.cameraRadius *= scaleFactor;
+        this.clampAngles();
+        if (this.onUiSync) this.onUiSync();
+    }
+
 
     /**
      * Updates the camera position based on the truck position.
@@ -413,7 +428,7 @@ export class CameraManager {
 
 
     SwitchTo(id) {
-        if ((!id) in this.cameras) {
+        if (!(id in this.cameras)) {
             console.log("Camera not found: ", id);
             return;
         }
@@ -448,6 +463,16 @@ export class CameraManager {
     MouseWheel(e) {
         if (!this.isOrbital()) return;
         this.cameras[this.currentCamera].MouseWheel(e);
+    }
+
+    TouchOrbit(deltaX, deltaY) {
+        if (!this.isOrbital()) return;
+        this.cameras[this.currentCamera].OrbitBy(-deltaX * 0.0065, -deltaY * 0.0065);
+    }
+
+    TouchPinchZoom(prevDist, newDist) {
+        if (!this.isOrbital() || prevDist <= 1 || newDist <= 1) return;
+        this.cameras[this.currentCamera].ZoomByScale(prevDist / newDist);
     }
 
 
