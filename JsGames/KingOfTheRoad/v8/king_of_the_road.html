@@ -1,0 +1,1695 @@
+<!doctype html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>King of The Road</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #333;
+      font-family: "Inter", sans-serif;
+    }
+
+    body:active {
+      cursor: grabbing;
+    }
+
+    #start-screen {
+      overflow-y: auto;
+    }
+
+    #top-info-panel {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 15px 34px 15px 25px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+
+    #close-top-info-button {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      background-color: rgba(231, 76, 60, 0.9);
+      color: #e0e0e0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      font-size: 0.75rem;
+      line-height: 1;
+      cursor: pointer;
+      pointer-events: auto;
+      user-select: none;
+      transition:
+        background-color 0.2s,
+        color 0.2s;
+    }
+
+    #close-top-info-button:hover {
+      background-color: rgba(248, 25, 0, 0.9);
+      color: #fff;
+    }
+
+    #game-controls-info {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(12, 16, 22, 0.94);
+      color: white;
+      padding: 16px 22px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+      width: min(310px, 88vw);
+      max-height: calc(100dvh - 28px);
+      overflow-y: auto;
+      z-index: 45;
+      display: none;
+    }
+
+    #close-info-button {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      width: 24px;
+      height: 24px;
+      background-color: rgba(231, 76, 60, 0.9);
+      color: #e0e0e0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      transition:
+        background-color 0.2s,
+        color 0.2s;
+    }
+
+    #close-info-button:hover {
+      background-color: rgba(248, 25, 0, 0.9);
+      color: #fff;
+    }
+
+    #message-box {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(26, 188, 156, 0.9);
+      color: white;
+      padding: 30px;
+      border-radius: 15px;
+      font-size: 2rem;
+      font-weight: bold;
+      display: none;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      max-width: 90%;
+      width: 500px;
+      z-index: 40;
+    }
+
+    #message-box.fail {
+      background-color: rgba(231, 76, 60, 0.9);
+    }
+
+    #action-button {
+      cursor: pointer;
+      font-size: 1.1rem;
+      margin-top: 10px;
+      background-color: #4a5d45;
+      padding: 8px 16px;
+      border-radius: 5px;
+    }
+
+    #parking-brake-indicator {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(200, 0, 0, 0.85);
+      color: white;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-weight: bold;
+      font-size: 1.1rem;
+      display: none;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      text-shadow: 0 0 5px black;
+      cursor: pointer;
+      user-select: none;
+      z-index: 5;
+    }
+
+    #speedometer {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 1.8rem;
+      font-weight: bold;
+      font-family: "Courier New", Courier, monospace;
+      text-shadow: 2px 2px 4px black;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      min-width: 150px;
+      text-align: center;
+    }
+
+    #top-dash {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 1.8rem;
+      font-weight: bold;
+      font-family: "Courier New", Courier, monospace;
+      text-shadow: 2px 2px 4px black;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      min-width: 150px;
+      text-align: center;
+    }
+
+    /* Pilha invertida de notificações no canto superior esquerdo (cresce de cima para baixo) */
+    #notification-stack {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      max-width: min(360px, 40vw);
+      z-index: 34;
+      pointer-events: none;
+    }
+
+    .notif-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 12px 9px 14px;
+      border-radius: 10px;
+      color: #ffffff;
+      box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+      pointer-events: auto;
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms ease;
+    }
+
+    .notif-item.is-entering {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.97);
+    }
+
+    .notif-item.is-leaving {
+      opacity: 0;
+      transform: translateX(-10px) scale(0.96);
+      pointer-events: none;
+    }
+
+    .notif-info {
+      background-color: rgba(15, 20, 28, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-left: 4px solid #38bdf8;
+    }
+
+    .notif-warning {
+      background-color: rgba(243, 156, 18, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.32);
+    }
+
+    .notif-text {
+      font-size: 0.96rem;
+      font-weight: 600;
+      line-height: 1.25;
+      text-align: left;
+    }
+
+    .notif-close-btn {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.28);
+      color: #ffffff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .notif-warning .notif-close-btn {
+      background-color: #c0392b;
+    }
+
+    .notif-close-btn:hover {
+      background-color: #e74c3c;
+    }
+
+    /* --- SUPORTE AUTOMÁTICO MOBILE / TOUCH --- */
+    button,
+    #close-info-button,
+    #close-top-info-button,
+    #parking-brake-indicator {
+      touch-action: manipulation;
+    }
+
+    body.is-mobile {
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body.is-mobile:active {
+      cursor: default;
+    }
+
+    body.is-mobile #start-screen {
+      height: 100dvh;
+      padding: 18px 16px calc(28px + env(safe-area-inset-bottom, 0px));
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    body.is-mobile #start-screen h1 {
+      font-size: 2.25rem;
+      line-height: 1.15;
+    }
+
+    body.is-mobile #game-container {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      touch-action: none;
+    }
+
+    body.is-mobile #game-controls-info,
+    body.is-mobile #message-box,
+    body.is-mobile #close-top-info-button,
+    body.is-mobile #parking-brake-indicator,
+    body.is-mobile .notif-item {
+      pointer-events: auto;
+    }
+
+    body.is-mobile canvas {
+      touch-action: none;
+    }
+
+    /* HUD compacto no celular para liberar visão e área dos polegares */
+    body.is-mobile #notification-stack {
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      left: calc(8px + env(safe-area-inset-left, 0px));
+      gap: 6px;
+      max-width: min(250px, 34vw);
+    }
+
+    body.is-mobile .notif-item {
+      padding: 6px 8px 6px 10px;
+      border-radius: 8px;
+      gap: 8px;
+    }
+
+    body.is-mobile .notif-text {
+      font-size: 0.78rem;
+    }
+
+    body.is-mobile .notif-close-btn {
+      width: 20px;
+      height: 20px;
+      font-size: 0.7rem;
+    }
+
+    body.is-mobile #top-info-panel {
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: min(360px, 44vw);
+      padding: 6px 26px 6px 12px;
+      border-radius: 10px;
+      z-index: 22;
+    }
+
+    body.is-mobile #info-title {
+      font-size: 0.85rem;
+      line-height: 1.15;
+      margin-bottom: 2px;
+    }
+
+    body.is-mobile #info-description {
+      font-size: 0.72rem;
+      line-height: 1.15;
+    }
+
+    body.is-mobile #close-top-info-button {
+      top: 5px;
+      right: 5px;
+      width: 20px;
+      height: 20px;
+    }
+
+    body.is-mobile #top-dash {
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      right: calc(8px + env(safe-area-inset-right, 0px));
+      min-width: 94px;
+      padding: 5px 8px;
+      font-size: 0.78rem !important;
+      line-height: 1.25;
+      border-radius: 10px;
+      z-index: 22;
+    }
+
+    body.is-mobile #speedometer {
+      top: calc(54px + env(safe-area-inset-top, 0px));
+      bottom: auto;
+      right: calc(8px + env(safe-area-inset-right, 0px));
+      min-width: 94px;
+      padding: 4px 8px;
+      font-size: 0.92rem;
+      border-radius: 10px;
+      z-index: 22;
+    }
+
+    body.is-mobile #parking-brake-indicator {
+      display: none !important;
+    }
+
+    body.is-mobile #message-box {
+      top: 50%;
+      bottom: auto;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px 18px;
+      font-size: 1.35rem;
+      width: min(420px, 90vw);
+      z-index: 40;
+    }
+
+    /* Bloqueio de orientação para modo horizontal (landscape) apenas em dispositivos móveis */
+    #rotate-device-overlay {
+      display: none;
+    }
+
+    @keyframes tiltPhoneLandscape {
+      0%, 20% { transform: rotate(0deg); }
+      55%, 85% { transform: rotate(-90deg); }
+      100% { transform: rotate(0deg); }
+    }
+
+    .rotate-phone-icon {
+      font-size: 3.4rem;
+      line-height: 1;
+      display: inline-block;
+      animation: tiltPhoneLandscape 2.4s ease-in-out infinite;
+    }
+
+    @media (orientation: portrait) {
+      body.is-mobile #rotate-device-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 28px;
+        background: rgba(15, 23, 42, 0.97);
+        color: #f8fafc;
+        text-align: center;
+        touch-action: none;
+      }
+    }
+
+    /* Controles de toque na borda inferior (visíveis apenas quando MobileControls ativa isMobile) */
+    #mobile-controls-root {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    #mobile-action-wrap {
+      position: absolute;
+      top: auto;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: center;
+      gap: 6px;
+      max-width: 96vw;
+      pointer-events: auto;
+    }
+
+    #mobile-action-bar {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 6px;
+      background: rgba(12, 16, 22, 0.72);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+
+    .mob-action-btn {
+      background: rgba(255, 255, 255, 0.1);
+      color: #f3f4f6;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .mob-action-btn:active {
+      transform: scale(0.95);
+    }
+
+    .mob-action-btn.is-danger-active {
+      background: rgba(215, 38, 38, 0.92);
+      border-color: rgba(255, 190, 190, 0.85);
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.65);
+    }
+
+    .mob-action-btn.is-ok-active {
+      background: rgba(22, 163, 74, 0.9);
+      border-color: rgba(187, 247, 208, 0.8);
+      color: #ffffff;
+    }
+
+    .mob-action-btn.is-warn-active {
+      background: rgba(234, 179, 8, 0.9);
+      border-color: rgba(254, 240, 138, 0.85);
+      color: #111827;
+    }
+
+    .mob-action-btn.is-info-active {
+      background: rgba(56, 189, 248, 0.9);
+      border-color: rgba(186, 230, 253, 0.9);
+      color: #0f172a;
+    }
+
+    /* Botões circulares automotivos START/STOP, Freio de Estacionamento (P) e Engate da Carreta no mobile (sem backlight externa) */
+    .mob-action-btn.mob-engine-start-btn,
+    .mob-action-btn.mob-park-brake-btn,
+    .mob-action-btn.mob-hitch-btn {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+      transition: transform 0.08s ease;
+    }
+
+    .mob-engine-svg,
+    .mob-park-svg,
+    .mob-hitch-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .mob-eng-led {
+      fill: #ff2a2a;
+      stroke: #1a0606;
+      stroke-width: 1;
+      transition: fill 0.16s ease, stroke 0.16s ease;
+    }
+
+    .mob-eng-led-glow {
+      fill: #ef4444;
+      opacity: 0.24;
+      transition: fill 0.16s ease, opacity 0.16s ease;
+    }
+
+    .mob-engine-start-btn.is-engine-on .mob-eng-led {
+      fill: #18e85b;
+      stroke: #061a0c;
+    }
+
+    .mob-engine-start-btn.is-engine-on .mob-eng-led-glow {
+      fill: #22c55e;
+      opacity: 0.26;
+    }
+
+    .mob-park-stroke {
+      stroke: #3c434f;
+      transition: stroke 0.16s ease;
+    }
+
+    .mob-park-fill {
+      fill: #3c434f;
+      transition: fill 0.16s ease;
+    }
+
+    .mob-park-glow {
+      opacity: 0;
+      transition: opacity 0.16s ease;
+    }
+
+    .mob-park-brake-btn.is-park-on .mob-park-stroke {
+      stroke: #ff2222;
+    }
+
+    .mob-park-brake-btn.is-park-on .mob-park-fill {
+      fill: #ff2222;
+    }
+
+    .mob-park-brake-btn.is-park-on .mob-park-glow {
+      opacity: 0.26;
+    }
+
+    .mob-hitch-cap-on,
+    .mob-hitch-ring-on,
+    .mob-hitch-arrow-on {
+      opacity: 0;
+      transition: opacity 0.16s ease;
+    }
+
+    .mob-hitch-arrow-off {
+      opacity: 1;
+      transition: opacity 0.16s ease;
+    }
+
+    .mob-hitch-fill {
+      fill: #b4bcc8;
+      transition: fill 0.16s ease;
+    }
+
+    .mob-hitch-stroke {
+      stroke: #b4bcc8;
+      transition: stroke 0.16s ease;
+    }
+
+    .mob-hitch-btn.is-hitch-on .mob-hitch-cap-on,
+    .mob-hitch-btn.is-hitch-on .mob-hitch-ring-on,
+    .mob-hitch-btn.is-hitch-on .mob-hitch-arrow-on {
+      opacity: 1;
+    }
+
+    .mob-hitch-btn.is-hitch-on .mob-hitch-arrow-off {
+      opacity: 0;
+    }
+
+    .mob-hitch-btn.is-hitch-on .mob-hitch-fill {
+      fill: #6bff9b;
+    }
+
+    .mob-hitch-btn.is-hitch-on .mob-hitch-stroke {
+      stroke: #6bff9b;
+    }
+
+    .mob-action-btn.mob-cam-icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 9px;
+      color: #f3f4f6;
+    }
+
+    .mob-action-btn.mob-horn-icon-btn {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: #f3f4f6;
+    }
+
+    .mob-action-btn.mob-horn-icon-btn.is-warn-active {
+      color: #111827;
+      box-shadow: none;
+    }
+
+    .mob-cam-svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
+
+    .mob-horn-svg {
+      width: 19px;
+      height: 13px;
+      display: block;
+    }
+
+    #mobile-cam-drawer {
+      display: none;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 8px;
+      background: rgba(12, 16, 22, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+      max-width: 92vw;
+    }
+
+    .mob-cam-pill {
+      background: rgba(255, 255, 255, 0.12);
+      color: #e5e7eb;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.74rem;
+      font-weight: 600;
+    }
+
+    .mob-cam-pill.is-cam-selected {
+      background: #ffd600;
+      color: #111827;
+      border-color: #fde047;
+      font-weight: 700;
+    }
+
+    #mobile-steer-pad {
+      position: absolute;
+      left: calc(12px + env(safe-area-inset-left, 0px));
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      width: 142px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    #mobile-pedal-pad {
+      position: absolute;
+      right: calc(12px + env(safe-area-inset-right, 0px));
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      width: 142px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .mob-drive-btn {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      background: rgba(17, 24, 39, 0.68);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      color: #ffffff;
+      border: 2px solid rgba(255, 255, 255, 0.34);
+      border-radius: 18px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+      transition: transform 0.06s ease, background-color 0.08s ease, border-color 0.08s ease;
+    }
+
+    .mob-steer-btn {
+      height: 68px;
+      font-size: 1.7rem;
+      font-weight: 700;
+    }
+
+    .mob-brake-btn {
+      height: 66px;
+      background: rgba(127, 29, 29, 0.68);
+      border-color: rgba(252, 165, 165, 0.45);
+    }
+
+    .mob-gas-btn {
+      height: 80px;
+      background: rgba(20, 83, 45, 0.68);
+      border-color: rgba(134, 239, 172, 0.45);
+    }
+
+    .mob-pedal-arrow {
+      font-size: 1.35rem;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    .mob-pedal-label {
+      font-size: 0.66rem;
+      letter-spacing: 0.05em;
+      font-weight: 700;
+      opacity: 0.92;
+      margin-top: 3px;
+    }
+
+    .mob-drive-btn.is-pressed {
+      transform: scale(0.93);
+      background: rgba(255, 214, 0, 0.88);
+      color: #111827;
+      border-color: #ffffff;
+      box-shadow: 0 2px 10px rgba(255, 214, 0, 0.5);
+    }
+
+    /* Ajuste fino para celular na horizontal (landscape de altura reduzida) */
+    @media (orientation: landscape) and (max-height: 540px) {
+      body.is-mobile #top-info-panel {
+        padding: 4px 24px 4px 10px;
+      }
+
+      body.is-mobile .mob-steer-btn {
+        height: 60px;
+      }
+
+      body.is-mobile .mob-brake-btn {
+        height: 58px;
+      }
+
+      body.is-mobile .mob-gas-btn {
+        height: 70px;
+      }
+    }
+
+    /* Telas horizontais compactas (garante folga entre os pedais/direção e a barra inferior) */
+    @media (orientation: landscape) and (max-width: 780px) {
+      #mobile-steer-pad,
+      #mobile-pedal-pad {
+        width: 118px;
+        gap: 6px;
+      }
+
+      #mobile-action-bar {
+        gap: 3px;
+        padding: 4px 5px;
+      }
+
+      .mob-action-btn {
+        padding: 5px 6px;
+        font-size: 0.66rem;
+      }
+
+      .mob-action-btn.mob-engine-start-btn,
+      .mob-action-btn.mob-park-brake-btn,
+      .mob-action-btn.mob-hitch-btn,
+      .mob-action-btn.mob-horn-icon-btn {
+        width: 27px;
+        height: 27px;
+        padding: 0;
+      }
+
+      .mob-action-btn.mob-cam-icon-btn {
+        padding: 5px 7px;
+      }
+
+      .mob-cam-svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .mob-horn-svg {
+        width: 16px;
+        height: 11px;
+      }
+    }
+
+    @media (orientation: landscape) and (max-width: 640px) {
+      #mobile-steer-pad,
+      #mobile-pedal-pad {
+        width: 104px;
+        gap: 5px;
+      }
+
+      .mob-action-btn {
+        padding: 4px 5px;
+        font-size: 0.62rem;
+      }
+
+      .mob-action-btn.mob-engine-start-btn,
+      .mob-action-btn.mob-park-brake-btn,
+      .mob-action-btn.mob-hitch-btn,
+      .mob-action-btn.mob-horn-icon-btn {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+      }
+
+      .mob-action-btn.mob-cam-icon-btn {
+        padding: 4px 6px;
+      }
+
+      .mob-cam-svg {
+        width: 13px;
+        height: 13px;
+      }
+
+      .mob-horn-svg {
+        width: 14px;
+        height: 10px;
+      }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+  <div id="rotate-device-overlay" aria-live="polite">
+    <div class="rotate-phone-icon">📱</div>
+    <h2 class="text-2xl font-bold" style="color: #ffd600;">Gire o celular para a horizontal</h2>
+    <p class="text-sm text-gray-300 max-w-xs">
+      Posicione o aparelho na horizontal (modo paisagem) para jogar com todos os controles na parte inferior da tela.
+    </p>
+    <button id="force-landscape-btn" type="button" style="display: none;"
+      class="mt-2 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-2.5 px-5 rounded-full text-sm shadow-lg">
+      ⛶ Tela Cheia Horizontal
+    </button>
+  </div>
+
+  <div id="start-screen"
+    class="absolute top-0 left-0 w-full h-full bg-gray-800 bg-opacity-95 flex flex-col items-center text-white p-8 z-50 text-center">
+    <div class="max-w-3xl" style="margin: auto;">
+      <img src="./img/banner_short.png" class="rounded-lg mb-8 w-full object-cover shadow-lg">
+      <h1 class="text-5xl font-bold mb-4" style="color: #ffd600">King of The Road</h1>
+      <p class="mb-8">
+        Freedom. Endless horizons. Life on the road isn't for everyone, but the reward is an office the size of the
+        world. And it all starts here. In this yard, your only opponents are the clock and your last attempt. With each
+        new "load" you fit into this slot, you become experienced, faster, wiser.</p>
+      <p class="mb-8">Ready for the next one?</p>
+      <div id="desktop-controls-guide"
+        class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10 text-left bg-gray-900 bg-opacity-50 p-6 rounded-lg border border-gray-700">
+        <div>
+          <h2 class="text-2xl font-bold mb-3">Vehicle Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↑</kbd> Forward / Brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">↓</kbd> Reverse / Brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">←</kbd> Turn left</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">→</kbd> Turn right</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">E</kbd> Start / stop engine</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">Space</kbd> Parking brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">T</kbd> Hitch trailer</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">H</kbd> Horn</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">L</kbd> Lights</li>
+            <li><kbd class="font-bold bg-gray-700 px-3 py-1 rounded">M</kbd> Mute sound</li>
+          </ul>
+
+          <span>&nbsp;</span>
+          <h2 class="text-2xl font-bold mb-3">General Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">?</kbd> Show controls helper</li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="text-2xl font-bold mb-3">Camera Controls</h2>
+          <ul class="space-y-2">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">🖰</kbd> Free cam controls</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">0</kbd> Free cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">2</kbd> Hood cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">3</kbd> Roof cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">4</kbd> Top cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">5</kbd> Rear cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">6</kbd> Left wheel cam</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">7</kbd> Right wheel cam</li>
+          </ul>
+        </div>
+      </div>
+      <div id="mobile-controls-guide" style="display: none;"
+        class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8 text-left bg-gray-900 bg-opacity-50 p-5 rounded-lg border border-gray-700">
+        <div>
+          <h2 class="text-xl font-bold mb-3">Touch Driving</h2>
+          <ul class="space-y-2 text-sm">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">START / STOP</kbd> Start or turn off engine</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">◄ / ►</kbd> Left thumb steering (slide supported)</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">▲ GO</kbd> Forward / Brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">▼ REV</kbd> Reverse / Brake</li>
+            <li><kbd class="font-bold bg-red-700 px-2 py-1 rounded">(P)</kbd> Release / engage parking brake</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded inline-flex items-center"><svg viewBox="14 34 70 28" class="inline-block w-6 h-3.5" aria-hidden="true"><path d="M16 57.2V49L17.7 40.8Q22.4 38.6 28.4 37.6V53H42.6L44.2 55.2V57.2H16ZM18.4 42.4L23.6 41.9V47.4H17.4Z" fill="currentColor" fill-rule="evenodd"></path><path d="M33.4 43.5H39.4V41.1L44.1 45.2L39.4 49.3V46.9H33.4Z" fill="currentColor"></path><rect x="46.8" y="36.8" width="35.2" height="16.6" rx="1.3" fill="currentColor"></rect><circle cx="21.6" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="37.6" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="52.8" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="67.7" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="76.5" cy="57.6" r="2.9" fill="currentColor"></circle></svg></kbd> Hitch / unhitch trailer (brake locked)</li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="text-xl font-bold mb-3">Touch Camera &amp; Quick Bar</h2>
+          <ul class="space-y-2 text-sm">
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">1 Finger</kbd> Drag screen to orbit camera</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">2 Fingers</kbd> Pinch screen to zoom</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded inline-flex items-center"><svg viewBox="0 0 24 24" class="inline-block w-4 h-4" aria-hidden="true"><rect x="2" y="5.5" width="13.5" height="13" rx="2.6" fill="currentColor"></rect><path d="M16.8 10.1L22.1 6.8C22.65 6.46 23.3 6.85 23.3 7.5V16.5C23.3 17.15 22.65 17.54 22.1 17.2L16.8 13.9V10.1Z" fill="currentColor"></path></svg></kbd> Switch camera views</li>
+            <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded inline-flex items-center gap-1"><svg viewBox="0 0 32 22" class="inline-block w-4 h-3" aria-hidden="true"><rect x="1.2" y="7.5" width="2.3" height="7" rx="1.15" fill="currentColor"></rect><path d="M4.7 8.7H12.2C15.8 8.7 18.7 6.8 20.9 3.3C21.5 2.4 22.8 2.8 22.8 3.9V18.1C22.8 19.2 21.5 19.6 20.9 18.7C18.7 15.2 15.8 13.3 12.2 13.3H4.7C4.2 13.3 4 13 4 12.5V9.5C4 9 4.2 8.7 4.7 8.7Z" fill="currentColor"></path><path d="M7.6 13V15.5C7.6 16.3 8.2 16.9 9 16.9H13.8C14.6 16.9 15.2 16.3 15.2 15.5V13.1" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"></path><line x1="25.2" y1="7.1" x2="29.9" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line><line x1="25.6" y1="11" x2="30.6" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line><line x1="25.2" y1="14.9" x2="29.9" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg> / 💡 / 🔊 / ? / ⛶</kbd> Horn, Lights, Sound, Help &amp; Fullscreen</li>
+          </ul>
+        </div>
+      </div>
+      <button id="start-game-button"
+        class="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-10 rounded-lg text-2xl transition-transform transform hover:scale-105 shadow-lg">
+        Play Game
+      </button>
+    </div>
+  </div>
+
+  <div id="game-container" style="display: none;">
+    <div id="notification-stack" aria-live="polite"></div>
+
+    <div id="top-info-panel">
+      <span id="close-top-info-button" title="Fechar">✕</span>
+      <h1 id="info-title" class="text-x2 font-bold mb-1">Level title goes here</h1>
+      <p id="info-description" class="text-sm">Level description goes here</p>
+    </div>
+
+    <div id="game-controls-info">
+      <span id="close-info-button" title="Close">X</span>
+      <div class="text-left text-sm">
+        <h1 class="text-xl font-bold mb-1">Controls</h1>
+        <hr class="border-gray-600 my-2" />
+        <div id="desktop-help-list">
+          <p><span class="font-bold">E:</span> Start / stop engine</p>
+          <p><span class="font-bold">Arrows:</span> Move the truck</p>
+          <p><span class="font-bold">Space:</span> Park brake</p>
+          <p><span class="font-bold">T:</span> Hitch trailer</p>
+          <p><span class="font-bold">H:</span> Horn</p>
+          <p><span class="font-bold">L:</span> Lights</p>
+          <p><span class="font-bold">M:</span> Mute sound</p>
+          <p><span class="font-bold">?:</span> Controls helper</p>
+          <p><span class="font-bold">Mouse:</span> Move Cam </p>
+          <p><span class="font-bold">Scroll:</span> Zoom</p>
+          <p><span class="font-bold">0:</span> Free cam</p>
+          <p><span class="font-bold">2:</span> Hood cam</p>
+          <p><span class="font-bold">3:</span> Roof cam</p>
+          <p><span class="font-bold">4:</span> Top cam</p>
+          <p><span class="font-bold">5:</span> Rear cam</p>
+          <p><span class="font-bold">6:</span> Left wheel cam</p>
+          <p><span class="font-bold">7:</span> Right wheel cam</p>
+        </div>
+        <div id="mobile-help-list" style="display: none;">
+          <p><span class="font-bold">START / STOP:</span> Start / stop engine</p>
+          <p><span class="font-bold">◄ / ►:</span> Steer left / right</p>
+          <p><span class="font-bold">▲ GO:</span> Forward / Brake</p>
+          <p><span class="font-bold">▼ REV:</span> Reverse / Brake</p>
+          <p><span class="font-bold">(P):</span> Release / lock park brake</p>
+          <p><span class="font-bold inline-flex items-center gap-1"><svg viewBox="14 34 70 28" class="inline-block w-5 h-3" aria-hidden="true"><path d="M16 57.2V49L17.7 40.8Q22.4 38.6 28.4 37.6V53H42.6L44.2 55.2V57.2H16ZM18.4 42.4L23.6 41.9V47.4H17.4Z" fill="currentColor" fill-rule="evenodd"></path><path d="M33.4 43.5H39.4V41.1L44.1 45.2L39.4 49.3V46.9H33.4Z" fill="currentColor"></path><rect x="46.8" y="36.8" width="35.2" height="16.6" rx="1.3" fill="currentColor"></rect><circle cx="21.6" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="37.6" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="52.8" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="67.7" cy="57.6" r="2.9" fill="currentColor"></circle><circle cx="76.5" cy="57.6" r="2.9" fill="currentColor"></circle></svg>:</span> Hitch / unhitch (stopped + P)</p>
+          <p><span class="font-bold inline-flex items-center gap-1"><svg viewBox="0 0 24 24" class="inline-block w-3.5 h-3.5" aria-hidden="true"><rect x="2" y="5.5" width="13.5" height="13" rx="2.6" fill="currentColor"></rect><path d="M16.8 10.1L22.1 6.8C22.65 6.46 23.3 6.85 23.3 7.5V16.5C23.3 17.15 22.65 17.54 22.1 17.2L16.8 13.9V10.1Z" fill="currentColor"></path></svg>:</span> Switch camera views</p>
+          <p><span class="font-bold inline-flex items-center gap-1"><svg viewBox="0 0 32 22" class="inline-block w-4 h-3" aria-hidden="true"><rect x="1.2" y="7.5" width="2.3" height="7" rx="1.15" fill="currentColor"></rect><path d="M4.7 8.7H12.2C15.8 8.7 18.7 6.8 20.9 3.3C21.5 2.4 22.8 2.8 22.8 3.9V18.1C22.8 19.2 21.5 19.6 20.9 18.7C18.7 15.2 15.8 13.3 12.2 13.3H4.7C4.2 13.3 4 13 4 12.5V9.5C4 9 4.2 8.7 4.7 8.7Z" fill="currentColor"></path><path d="M7.6 13V15.5C7.6 16.3 8.2 16.9 9 16.9H13.8C14.6 16.9 15.2 16.3 15.2 15.5V13.1" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"></path><line x1="25.2" y1="7.1" x2="29.9" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line><line x1="25.6" y1="11" x2="30.6" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line><line x1="25.2" y1="14.9" x2="29.9" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg> / 💡 / 🔊 / ?:</span> Horn / Lights / Sound / Help</p>
+          <p><span class="font-bold">1 Finger:</span> Orbit free camera</p>
+          <p><span class="font-bold">2 Fingers:</span> Pinch to zoom</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="message-box">
+      <p id="message-text"></p>
+      <button id="action-button" class="mt-4 text-lg font-normal"></button>
+    </div>
+
+    <div id="parking-brake-indicator">(P)</div>
+
+    <div id="top-dash" style="font-family: sans-serif; font-size: large;">
+      <p id="attempt-counter">Attempt goes here</p>
+      <p id="stopwatch">00:00</p>
+    </div>
+
+    <div id="speedometer">0 km/h</div>
+  </div>
+  <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.18.0/dist/cannon-es.js",
+                "cannon-es-debugger": "./cannon-es-debugger.js"
+            }
+        }
+  </script>
+
+  <!----------------------------------------------------------------------------------------------
+   -- GLOBAL VARIABLES --
+   ----------------------------------------------------------------------------------------------->
+  <script type="module">
+    import * as THREE from 'three';
+    import { Scenario } from './scenario.js';
+    import { CameraManager } from './camera_manager.js';
+    import { KeyboardController } from './keyboard_controller.js';
+    import { LevelManager } from './level_manager.js';
+    import { KenworthW900 } from './kenworth_w900.js';
+    import { TrunkTrailer } from './trunk_trailer.js';
+    import { Stopwatch } from './stopwatch.js';
+    import {
+      MobileControls,
+      detectMobileDevice,
+      adaptStartScreenForDevice,
+      tryLockLandscape,
+      enterFullscreenLandscape
+    } from './mobile_controls.js';
+    import CannonDebugger from 'cannon-es-debugger'
+
+    /**
+     * Instala as Soluções A e C diretamente no CANNON.RaycastVehicle (cannon.js 0.6.2):
+     *  - Solução A: Executa os raios e a suspensão vertical do RaycastVehicle em `world.subsystems`
+     *    (ANTES do `narrowphase` e do `solver.solve(dt)`), acumulando a força/torque da suspensão
+     *    em `chassisBody.force` e `chassisBody.torque`. Assim, quando o solver resolve o contato
+     *    dos pés rígidos dianteiros do trailer, a traseira já está sustentada pelas rodas e não
+     *    gera rotação fantasma nem empurrão horizontal por atrito.
+     *  - Solução C: Divide o impulso de frenagem (`calcRollingFriction`) pelo número de rodas em
+     *    contato com o solo (`numWheelsOnGround`), eliminando o overshoot de 400%/600% quando
+     *    `setBrake()` é acionado em múltiplas rodas.
+     */
+    function installCannonFixesAC(CANNON) {
+      const Vec3 = CANNON.Vec3;
+      const worldAxis = [new Vec3(1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, 1)];
+
+      function computeImpulseDenominator(body, pos, normal) {
+        const r0 = new Vec3(), c0 = new Vec3(), vec = new Vec3(), m = new Vec3();
+        pos.vsub(body.position, r0);
+        r0.cross(normal, c0);
+        body.invInertiaWorld.vmult(c0, m);
+        m.cross(r0, vec);
+        return body.invMass + normal.dot(vec);
+      }
+
+      function resolveSingleBilateral(body1, pos1, body2, pos2, normal) {
+        const normalLenSqr = normal.norm2();
+        if (normalLenSqr > 1.1) return 0;
+        const vel1 = new Vec3(), vel2 = new Vec3(), vel = new Vec3();
+        body1.getVelocityAtWorldPoint(pos1, vel1);
+        body2.getVelocityAtWorldPoint(pos2, vel2);
+        vel1.vsub(vel2, vel);
+        const rel_vel = normal.dot(vel);
+        const contactDamping = 0.2;
+        const massTerm = 1 / (body1.invMass + body2.invMass);
+        return -contactDamping * rel_vel * massTerm;
+      }
+
+      function calcRollingFriction(body0, body1, frictionPosWorld, frictionDirectionWorld, maxImpulse, numWheelsOnGround) {
+        const vel1 = new Vec3(), vel2 = new Vec3(), vel = new Vec3();
+        body0.getVelocityAtWorldPoint(frictionPosWorld, vel1);
+        body1.getVelocityAtWorldPoint(frictionPosWorld, vel2);
+        vel1.vsub(vel2, vel);
+        const vrel = frictionDirectionWorld.dot(vel);
+        const denom0 = computeImpulseDenominator(body0, frictionPosWorld, frictionDirectionWorld);
+        const denom1 = computeImpulseDenominator(body1, frictionPosWorld, frictionDirectionWorld);
+        const jacDiagABInv = 1 / ((denom0 + denom1) * (numWheelsOnGround || 1));
+        let j1 = -vrel * jacDiagABInv;
+        if (j1 > maxImpulse) j1 = maxImpulse;
+        if (j1 < -maxImpulse) j1 = -maxImpulse;
+        return j1;
+      }
+
+      CANNON.RaycastVehicle.prototype.updateFriction = function (timeStep) {
+        const surfNormalWS_scaled_proj = new Vec3();
+        const wheelInfos = this.wheelInfos;
+        const numWheels = wheelInfos.length;
+        const chassisBody = this.chassisBody;
+        const forwardWS = [];
+        const axle = [];
+        let numWheelsOnGround = 0;
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const groundObject = wheel.raycastResult.body;
+          if (groundObject) numWheelsOnGround++;
+          wheel.sideImpulse = 0;
+          wheel.forwardImpulse = 0;
+          forwardWS[i] = new Vec3();
+          axle[i] = new Vec3();
+        }
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const groundObject = wheel.raycastResult.body;
+          if (groundObject) {
+            const axlei = axle[i];
+            const wheelTrans = this.getWheelTransformWorld(i);
+            wheelTrans.vectorToWorldFrame(worldAxis[this.indexRightAxis], axlei);
+            const surfNormalWS = wheel.raycastResult.hitNormalWorld;
+            const proj = axlei.dot(surfNormalWS);
+            surfNormalWS.scale(proj, surfNormalWS_scaled_proj);
+            axlei.vsub(surfNormalWS_scaled_proj, axlei);
+            axlei.normalize();
+            surfNormalWS.cross(axlei, forwardWS[i]);
+            forwardWS[i].normalize();
+            wheel.sideImpulse = resolveSingleBilateral(
+              chassisBody,
+              wheel.raycastResult.hitPointWorld,
+              groundObject,
+              wheel.raycastResult.hitPointWorld,
+              axlei
+            );
+            wheel.sideImpulse *= 1;
+          }
+        }
+
+        const sideFactor = 1;
+        const fwdFactor = 0.5;
+        this.sliding = false;
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const groundObject = wheel.raycastResult.body;
+          let rollingFriction = 0;
+          wheel.slipInfo = 1;
+          if (groundObject) {
+            const defaultRollingFrictionImpulse = 0;
+            const maxImpulse = wheel.brake ? wheel.brake : defaultRollingFrictionImpulse;
+            rollingFriction = calcRollingFriction(
+              chassisBody,
+              groundObject,
+              wheel.raycastResult.hitPointWorld,
+              forwardWS[i],
+              maxImpulse,
+              numWheelsOnGround
+            );
+            rollingFriction += wheel.engineForce * timeStep;
+            const factor = maxImpulse / rollingFriction;
+            wheel.slipInfo *= factor;
+          }
+
+          wheel.forwardImpulse = 0;
+          wheel.skidInfo = 1;
+          if (groundObject) {
+            wheel.skidInfo = 1;
+            const maximp = wheel.suspensionForce * timeStep * wheel.frictionSlip;
+            const maximpSquared = maximp * maximp;
+            wheel.forwardImpulse = rollingFriction;
+            const x = wheel.forwardImpulse * fwdFactor;
+            const y = wheel.sideImpulse * sideFactor;
+            const impulseSquared = x * x + y * y;
+            wheel.sliding = false;
+            if (impulseSquared > maximpSquared) {
+              this.sliding = true;
+              wheel.sliding = true;
+              const factor = maximp / Math.sqrt(impulseSquared);
+              wheel.skidInfo *= factor;
+            }
+          }
+        }
+
+        if (this.sliding) {
+          for (let i = 0; i < numWheels; i++) {
+            const wheel = wheelInfos[i];
+            if (wheel.sideImpulse !== 0 && wheel.skidInfo < 1) {
+              wheel.forwardImpulse *= wheel.skidInfo;
+              wheel.sideImpulse *= wheel.skidInfo;
+            }
+          }
+        }
+
+        for (let i = 0; i < numWheels; i++) {
+          const wheel = wheelInfos[i];
+          const rel_pos = new Vec3();
+          rel_pos.copy(wheel.raycastResult.hitPointWorld);
+          if (wheel.forwardImpulse !== 0) {
+            const impulse = new Vec3();
+            forwardWS[i].scale(wheel.forwardImpulse, impulse);
+            chassisBody.applyImpulse(impulse, rel_pos);
+          }
+          if (wheel.sideImpulse !== 0) {
+            const groundObject = wheel.raycastResult.body;
+            const rel_pos2 = new Vec3();
+            rel_pos2.copy(wheel.raycastResult.hitPointWorld);
+            const sideImp = new Vec3();
+            axle[i].scale(wheel.sideImpulse, sideImp);
+            chassisBody.pointToLocalFrame(rel_pos, rel_pos);
+            rel_pos["xyz"[this.indexUpAxis]] *= wheel.rollInfluence;
+            chassisBody.pointToWorldFrame(rel_pos, rel_pos);
+            chassisBody.applyImpulse(sideImp, rel_pos);
+            sideImp.scale(-1, sideImp);
+            groundObject.applyImpulse(sideImp, rel_pos2);
+          }
+        }
+      };
+
+      CANNON.RaycastVehicle.prototype.addToWorld = function (world) {
+        world.addBody(this.chassisBody);
+        const that = this;
+        const fVec = new Vec3();
+        const relPos = new Vec3();
+        const tq = new Vec3();
+        const angImp = new Vec3();
+
+        this._suspensionSubsystem = {
+          update() {
+            const dt = world.dt;
+            const wheelInfos = that.wheelInfos;
+            const body = that.chassisBody;
+            if (body.sleepState === CANNON.Body.SLEEPING || !(body.type & CANNON.Body.DYNAMIC)) {
+              body.force.set(0, 0, 0);
+              body.torque.set(0, 0, 0);
+              body.velocity.set(0, 0, 0);
+              body.angularVelocity.set(0, 0, 0);
+              that._suspensionUpdatedThisStep = false;
+              return;
+            }
+            that._suspensionUpdatedThisStep = true;
+            for (let i = 0; i < wheelInfos.length; i++) {
+              that.updateWheelTransform(i);
+            }
+            that.currentVehicleSpeedKmHour = 3.6 * body.velocity.norm();
+            const forwardWorld = new Vec3();
+            that.getVehicleAxisWorld(that.indexForwardAxis, forwardWorld);
+            if (forwardWorld.dot(body.velocity) < 0) {
+              that.currentVehicleSpeedKmHour *= -1;
+            }
+            for (let i = 0; i < wheelInfos.length; i++) {
+              that.castRay(wheelInfos[i]);
+            }
+            that.updateSuspension(dt);
+            for (let i = 0; i < wheelInfos.length; i++) {
+              const wheel = wheelInfos[i];
+              let sForce = wheel.suspensionForce;
+              if (sForce > wheel.maxSuspensionForce) sForce = wheel.maxSuspensionForce;
+              wheel.raycastResult.hitNormalWorld.scale(sForce, fVec);
+              wheel.raycastResult.hitPointWorld.vsub(body.position, relPos);
+              body.force.vadd(fVec, body.force);
+              relPos.cross(fVec, tq);
+              body.torque.vadd(tq, body.torque);
+            }
+          }
+        };
+        world.subsystems.push(this._suspensionSubsystem);
+
+        this.preStepCallback = function () {
+          const dt = world.dt;
+          const wheelInfos = that.wheelInfos;
+          const body = that.chassisBody;
+          if (body.sleepState === CANNON.Body.SLEEPING || !(body.type & CANNON.Body.DYNAMIC)) {
+            body.force.set(0, 0, 0);
+            body.torque.set(0, 0, 0);
+            body.velocity.set(0, 0, 0);
+            body.angularVelocity.set(0, 0, 0);
+            return;
+          }
+          if (!that._suspensionUpdatedThisStep) {
+            that._suspensionSubsystem.update();
+          }
+
+          const invMassDt = body.invMass * dt;
+          body.velocity.x += body.force.x * invMassDt;
+          body.velocity.y += body.force.y * invMassDt;
+          body.velocity.z += body.force.z * invMassDt;
+          body.invInertiaWorld.vmult(body.torque, angImp);
+          angImp.mult(dt, angImp);
+          body.angularVelocity.vadd(angImp, body.angularVelocity);
+          body.force.set(0, 0, 0);
+          body.torque.set(0, 0, 0);
+
+          that.updateFriction(dt);
+
+          const hitNormalScaledWithProj = new Vec3();
+          const fwd = new Vec3();
+          const vel = new Vec3();
+          for (let i = 0; i < wheelInfos.length; i++) {
+            const wheel = wheelInfos[i];
+            body.getVelocityAtWorldPoint(wheel.chassisConnectionPointWorld, vel);
+            let m = 1;
+            if (that.indexUpAxis === 1) m = -1;
+            let proj2 = 0;
+            if (wheel.isInContact) {
+              that.getVehicleAxisWorld(that.indexForwardAxis, fwd);
+              const proj = fwd.dot(wheel.raycastResult.hitNormalWorld);
+              wheel.raycastResult.hitNormalWorld.scale(proj, hitNormalScaledWithProj);
+              fwd.vsub(hitNormalScaledWithProj, fwd);
+              proj2 = fwd.dot(vel);
+              wheel.deltaRotation = m * proj2 * dt / wheel.radius;
+            }
+            if ((wheel.sliding || !wheel.isInContact) && wheel.engineForce !== 0 && wheel.useCustomSlidingRotationalSpeed) {
+              wheel.deltaRotation = (wheel.engineForce > 0 ? 1 : -1) * wheel.customSlidingRotationalSpeed * dt;
+            }
+            if (Math.abs(wheel.brake) > Math.abs(wheel.engineForce) && Math.abs(proj2) < 0.05) {
+              wheel.deltaRotation = 0;
+            }
+            wheel.rotation += wheel.deltaRotation;
+            wheel.deltaRotation *= 0.99;
+          }
+        };
+        world.addEventListener("preStep", this.preStepCallback);
+        this.world = world;
+      };
+    }
+
+    installCannonFixesAC(window.CANNON);
+
+    class Log {
+      constructor(pace) {
+        this.pace = pace;
+        this.counter = 0;
+      }
+
+      Update() {
+        this.counter += this.pace;
+      }
+
+      LOG(msg) {
+        if (this.counter % 50 === 0)
+          console.log(this.counter, msg);
+      }
+    }
+
+    const logger = new Log(8);
+    const clock = new THREE.Clock();
+    const scenario = new Scenario();
+    const w900 = new KenworthW900();
+    const trunk_trailer = new TrunkTrailer();
+    const keyboardController = new KeyboardController();
+    const stopwatch = new Stopwatch(document.getElementById("stopwatch"));
+    let gameStarted = false;
+    let camera, world;
+    let level_manager;
+    let mobileControls = null;
+    let wasLevelEnded = false;
+    let cannonDebugger;
+    let debugVisible = false;
+    const debugMeshes = [];
+
+    function initCannonDebugger() {
+      cannonDebugger = new CannonDebugger(scenario.scene, world, {
+        onInit(body, mesh) {
+          mesh.visible = debugVisible;
+          debugMeshes.push(mesh);
+        },
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key.toLowerCase() === 'd') {
+          debugVisible = !debugVisible;
+          if (debugVisible) {
+            cannonDebugger.update();
+          }
+          debugMeshes.forEach((m) => { m.visible = debugVisible; });
+        }
+      });
+    }
+
+    /**
+     * Função principal que inicializa e orquestra a criação do jogo.
+     */
+    function init() {
+      gameStarted = true;
+
+      world = new CANNON.World();
+      world.gravity.set(0, -9.82, 0);
+      world.broadphase = new CANNON.SAPBroadphase(world);
+      world.solver.iterations = 10
+      world.allowSleep = true;
+
+      const fifthWheelMaterial = new CANNON.Material('fifthWheelMaterial');
+      const kingPinMaterial = new CANNON.Material('kingPinMaterial');
+      const contactMaterial = new CANNON.ContactMaterial(fifthWheelMaterial, kingPinMaterial, {
+        friction: 0,
+        restitution: 0,
+      });
+      world.addContactMaterial(contactMaterial);
+
+      scenario.Initialize(world);
+      w900.Initialize({
+        world: world,
+        scene: scenario.scene,
+        notificationStack: document.getElementById('notification-stack'),
+        brakeIndicator: document.getElementById("parking-brake-indicator"),
+        speedometer: document.getElementById("speedometer"),
+        fifthWheelMaterial: fifthWheelMaterial
+      });
+
+      trunk_trailer.Initialize({
+        world: world,
+        scene: scenario.scene,
+        kingPinMaterial: kingPinMaterial
+      });
+      w900.setWorldTrailer(trunk_trailer);
+
+      camera = new CameraManager(window.innerWidth, window.innerHeight, w900);
+
+      setupControls();
+
+      mobileControls = new MobileControls({
+        keyboardController: keyboardController,
+        camera: camera,
+        truck: w900,
+        canvas: scenario.renderer.domElement,
+        onHitch: EngageTruckTrailer
+      });
+      if (document.body.classList.contains('is-mobile') && !mobileControls.isMobile) {
+        mobileControls.setMobileActive(true);
+      }
+
+      const uiElements = {
+        infoPanel: document.getElementById('game-controls-info'),
+        topInfoPanel: document.getElementById('top-info-panel'),
+        infoTitle: document.getElementById('info-title'),
+        infoDescription: document.getElementById('info-description'),
+        attemptCounter: document.getElementById('attempt-counter'),
+        msgBox: document.getElementById('message-box'),
+        msgText: document.getElementById('message-text'),
+        actionButton: document.getElementById('action-button')
+      };
+      level_manager = new LevelManager(uiElements, camera, w900, trunk_trailer, keyboardController, scenario, stopwatch);
+      level_manager.setupLevel();
+      mobileControls.syncHUD();
+
+      scenario.SetUpCollisions(level_manager);
+
+      initCannonDebugger();
+
+      animate();
+    }
+
+
+    /**
+     * Configura todos os listeners de eventos para controle.
+     */
+    function setupControls() {
+      document.addEventListener("keydown", (e) => {
+        if (w900.engineSound) w900.engineSound.resume();
+        keyboardController.HandleKeyDown(e);
+        if (e.key === "0") camera.SwitchTo("orbital");
+        if (e.key === "2") camera.SwitchTo("hood");
+        if (e.key === "3") camera.SwitchTo("roof");
+        if (e.key === "4") camera.SwitchTo("top");
+        if (e.key === "5") camera.SwitchTo("rear");
+        if (e.key === "6") camera.SwitchTo("left");
+        if (e.key === "7") camera.SwitchTo("right");
+        if (e.key.toLowerCase() === "e" && !e.repeat) {
+          w900.toggleEngine();
+          if (mobileControls) mobileControls.syncHUD();
+        }
+        if (e.key.toLowerCase() === "t" && !e.repeat) EngageTruckTrailer();
+        if (e.key.toLowerCase() === "h" && !e.repeat) w900.setHorn(true);
+        if (e.key.toLowerCase() === "l" && !e.repeat) w900.toggleHeadlights();
+        if (e.key.toLowerCase() === "m" && !e.repeat) w900.toggleEngineSound();
+        if ((e.key === "?" || (e.code === "Slash" && e.shiftKey)) && !e.repeat) {
+          const infoEl = document.getElementById("game-controls-info");
+          infoEl.style.display = infoEl.style.display === "block" ? "none" : "block";
+          if (mobileControls) mobileControls.syncHUD();
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          w900.dismissWarnings();
+          const msgBox = document.getElementById('message-box');
+          const actionButton = document.getElementById('action-button');
+          if (msgBox && msgBox.style.display === 'block' && actionButton) {
+            actionButton.click();
+          }
+        }
+      });
+
+      document.addEventListener("keyup", (e) => {
+        keyboardController.HandleKeyUp(e);
+        if (e.key.toLowerCase() === "h") w900.setHorn(false);
+      });
+      window.addEventListener("blur", () => {
+        w900.setHorn(false);
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) w900.setHorn(false);
+      });
+      document.addEventListener("mousedown", (e) => {
+        if (w900.engineSound) w900.engineSound.resume();
+        camera.MouseDown(e);
+      });
+      document.addEventListener("mouseup", (e) => {
+        camera.MouseUp(e);
+      });
+      document.addEventListener("mousemove", (e) => {
+        camera.MouseMove(e);
+      });
+      document.addEventListener("wheel", (e) => {
+        camera.MouseWheel(e);
+      });
+      document.getElementById("close-info-button").addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+      });
+      document.getElementById("close-info-button").addEventListener("touchstart", (e) => {
+        e.stopPropagation();
+      }, { passive: true });
+      document.getElementById("close-info-button").addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.getElementById("game-controls-info").style.display = "none";
+        if (mobileControls) mobileControls.syncHUD();
+      });
+      document.getElementById("close-top-info-button").addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+      });
+      document.getElementById("close-top-info-button").addEventListener("touchstart", (e) => {
+        e.stopPropagation();
+      }, { passive: true });
+      document.getElementById("close-top-info-button").addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.getElementById("top-info-panel").style.display = "none";
+      });
+
+      document.getElementById('parking-brake-indicator').addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+      });
+
+      document.getElementById('parking-brake-indicator').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (w900.engineSound) w900.engineSound.resume();
+        keyboardController.switchParkingBreak();
+        if (mobileControls) mobileControls.syncHUD();
+      });
+    }
+
+
+    /**
+     * Lida com a movimentação do veículo baseada nas teclas pressionadas.
+     */
+    function handleVehicleControls(deltaTime) {
+      w900.setSteering(keyboardController.getSteering(deltaTime));
+      w900.setParkingBrake(keyboardController.parkingBrakeOn);
+      const isMoving = w900.isMoving();
+      w900.Brake(keyboardController.getBrake(isMoving));
+      w900.Throttle(keyboardController.getThrottle(isMoving));
+    }
+
+    function EngageTruckTrailer() {
+      w900.EngageTrailer(trunk_trailer);
+    }
+
+
+    /**
+     * O loop principal de animação e lógica do jogo.
+     */
+    function animate() {
+      const deltaTime = clock.getDelta();
+      if (!level_manager.Ended()) {
+        wasLevelEnded = false;
+        handleVehicleControls(deltaTime);
+        level_manager.checkSuccess();
+        world.step(1 / 60, deltaTime);
+        w900.Update(deltaTime);
+        trunk_trailer.Update();
+        if (mobileControls) mobileControls.syncHUD();
+      } else if (!wasLevelEnded) {
+        wasLevelEnded = true;
+        if (mobileControls) {
+          mobileControls.releaseAllInputs();
+          mobileControls.syncHUD();
+        }
+      }
+
+      requestAnimationFrame(animate);
+
+      if (debugVisible) {
+        cannonDebugger.update();
+      }
+
+      camera.Update();
+      scenario.Update(camera.Get());
+      logger.Update();
+    }
+
+
+    // --- INICIAR JOGO ---
+    function handleViewportResize() {
+      if (!gameStarted) return;
+      scenario.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      camera.Resize(window.innerWidth, window.innerHeight);
+      scenario.renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener("resize", handleViewportResize);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(handleViewportResize, 120);
+    });
+
+    adaptStartScreenForDevice(detectMobileDevice());
+
+    window.onload = () => {
+      adaptStartScreenForDevice(detectMobileDevice());
+      const forceLandscapeBtn = document.getElementById('force-landscape-btn');
+      if (
+        forceLandscapeBtn &&
+        document.documentElement &&
+        (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)
+      ) {
+        forceLandscapeBtn.style.display = 'inline-block';
+        forceLandscapeBtn.addEventListener('click', () => {
+          enterFullscreenLandscape();
+        });
+      }
+
+      window.addEventListener('touchstart', () => {
+        if (!document.body.classList.contains('is-mobile')) {
+          adaptStartScreenForDevice(true);
+        }
+      }, { passive: true, once: true });
+
+      const startButton = document.getElementById('start-game-button');
+      const startScreen = document.getElementById('start-screen');
+      const gameContainer = document.getElementById('game-container');
+
+      startButton.addEventListener('click', () => {
+        if (gameStarted) return;
+        if (document.body.classList.contains('is-mobile')) {
+          tryLockLandscape();
+        }
+        startScreen.style.display = 'none';
+        gameContainer.style.display = 'block';
+        init();
+        if (w900.engineSound) {
+          w900.engineSound.resume();
+        }
+      });
+    };
+  </script>
+</body>
+
+</html>

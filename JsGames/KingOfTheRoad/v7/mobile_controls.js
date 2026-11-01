@@ -7,16 +7,17 @@
  */
 
 export function detectMobileDevice() {
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-    const ua = navigator.userAgent || '';
-    const uaMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    const iPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-    const coarseNoHover = Boolean(
-        window.matchMedia &&
-        window.matchMedia('(pointer: coarse)').matches &&
-        window.matchMedia('(hover: none)').matches
-    );
-    return Boolean(uaMobile || iPadOS || coarseNoHover);
+    return false;
+    // if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+    // const ua = navigator.userAgent || '';
+    // const uaMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    // const iPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    // const coarseNoHover = Boolean(
+    //     window.matchMedia &&
+    //     window.matchMedia('(pointer: coarse)').matches &&
+    //     window.matchMedia('(hover: none)').matches
+    // );
+    // return Boolean(uaMobile || iPadOS || coarseNoHover);
 }
 
 export function tryLockLandscape() {
@@ -43,18 +44,19 @@ export function enterFullscreenLandscape() {
 }
 
 export function adaptStartScreenForDevice(isMobile) {
-    if (typeof document === 'undefined') return;
-    const desktopControls = document.getElementById('desktop-controls-guide');
-    const mobileControls = document.getElementById('mobile-controls-guide');
-    if (isMobile) {
-        document.body.classList.add('is-mobile');
-        if (desktopControls) desktopControls.style.display = 'none';
-        if (mobileControls) mobileControls.style.display = 'grid';
-    } else {
-        document.body.classList.remove('is-mobile');
-        if (desktopControls) desktopControls.style.display = '';
-        if (mobileControls) mobileControls.style.display = 'none';
-    }
+    return;
+    // if (typeof document === 'undefined') return;
+    // const desktopControls = document.getElementById('desktop-controls-guide');
+    // const mobileControls = document.getElementById('mobile-controls-guide');
+    // if (isMobile) {
+    //     document.body.classList.add('is-mobile');
+    //     if (desktopControls) desktopControls.style.display = 'none';
+    //     if (mobileControls) mobileControls.style.display = 'grid';
+    // } else {
+    //     document.body.classList.remove('is-mobile');
+    //     if (desktopControls) desktopControls.style.display = '';
+    //     if (mobileControls) mobileControls.style.display = 'none';
+    // }
 }
 
 export class MobileControls {
@@ -80,10 +82,10 @@ export class MobileControls {
         this._lastMutedState = null;
         this._lastCameraId = null;
 
-        this._buildDOM();
-        this._bindCanvasGestures();
-        this._bindLifecycleSafety();
-        this.setMobileActive(this.isMobile);
+        // this._buildDOM();
+        // this._bindCanvasGestures();
+        // this._bindLifecycleSafety();
+        // this.setMobileActive(this.isMobile);
     }
 
     setMobileActive(active) {

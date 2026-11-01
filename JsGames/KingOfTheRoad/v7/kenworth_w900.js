@@ -20,8 +20,9 @@ export class KenworthW900 {
         this.chassisMesh;
         this.wheelMeshes = [];
         this.trailer = null;
-        this.engineSound = new W900EngineSound();
-        this.engineSound.start();
+        // this.engineSound = new W900EngineSound();
+        // this.engineSound.start();
+        this.engineSound = null;
 
         // 1. Física do Veículo
         const chassisBody = new CANNON.Body({
