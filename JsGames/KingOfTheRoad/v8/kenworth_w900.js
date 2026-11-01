@@ -130,7 +130,10 @@ export class KenworthW900 {
 
         if (next) {
             if (changed) {
-                const durSec = silent ? 0.0 : ENGINE_STARTUP_DURATION;
+                const startupDur = (this.engineSound && typeof this.engineSound.getStartupDuration === 'function')
+                    ? this.engineSound.getStartupDuration()
+                    : ENGINE_STARTUP_DURATION;
+                const durSec = silent ? 0.0 : startupDur;
                 this._crankTimer = durSec;
                 const nowMs = (typeof performance !== 'undefined' && typeof performance.now === 'function')
                     ? performance.now()
@@ -196,6 +199,7 @@ export class KenworthW900 {
             for (let i = 2; i < 6; i++) {
                 this.vehicle.applyEngineForce(0, i);
             }
+            this._applyCoastDrag(false);
             if (powerFraction !== 0) {
                 this.showWarning("⚠ Start the engine to drive", { group: 'engine-off-warn' });
             }
@@ -208,6 +212,7 @@ export class KenworthW900 {
             for (let i = 2; i < 6; i++) {
                 this.vehicle.applyEngineForce(0, i);
             }
+            this._applyCoastDrag(true);
             return;
         }
         this.currentThrottle = powerFraction;
@@ -228,6 +233,38 @@ export class KenworthW900 {
         }
         for (let i = 2; i < 6; i++) {
             this.vehicle.applyEngineForce(force, i);
+        }
+        if (powerFraction === 0) {
+            this._applyCoastDrag(true);
+        }
+    }
+
+    /**
+     * Desaceleração natural ao tirar o pé do acelerador (caminhão engrenado):
+     * resistência ao rolamento dos pneus + freio-motor (compressão do diesel), que perde força
+     * perto de parar. Aplicado como impulso de atrito por passo de física nas 4 rodas de tração
+     * (no RaycastVehicle do cannon-es, `brake` = impulso máximo por passo de 1/60 s).
+     * @param {boolean} engineBraking: true se o motor está ligado (adiciona o freio-motor).
+     */
+    _applyCoastDrag(engineBraking) {
+        if (this.currentBrake !== 0) return;  // Freio de serviço já está atuando
+        const speedMs = Math.abs(this.GetSpeed());
+        if (speedMs < 0.05) return;
+
+        const ROLLING_DECEL = 0.18;        // m/s²: atrito de rolamento dos pneus/rolamentos
+        const ENGINE_BRAKE_DECEL = 0.62;   // m/s²: compressão do motor engrenado (sem Jake Brake)
+        const fade = Math.min(1.0, speedMs / 2.5);  // freio-motor some suavemente abaixo de ~9 km/h
+        const decel = ROLLING_DECEL + (engineBraking ? ENGINE_BRAKE_DECEL * fade : 0.0);
+
+        const TRUCK_MASS = this.vehicle.chassisBody.mass;
+        const TRAILER_MASS = 3000;
+        const totalMass = TRUCK_MASS + (this.HasTrailer() ? TRAILER_MASS : 0);
+        const PHYSICS_HZ = 60;
+        const impulsePerWheel = (totalMass * decel) / (PHYSICS_HZ * 4);
+
+        const parkingForce = this.parkingBrakeOn ? 50 : 0;
+        for (let i = 2; i < 6; i++) {
+            this.vehicle.setBrake(Math.max(parkingForce, impulsePerWheel), i);
         }
     }
 
@@ -275,16 +312,26 @@ export class KenworthW900 {
     }
 
     setEngineVariant(variantId) {
-        if (!this.engineSound) return 4;
+        if (!this.engineSound) return 6;
+        const prevVariant = this.engineSound.getEngineVariant();
         const selected = this.engineSound.setEngineVariant(variantId);
+        if (this.engineOn && this._crankEndMs > 0 && prevVariant !== selected) {
+            const wasSample = prevVariant === 6 || prevVariant === 7;
+            const nextSample = selected === 6 || selected === 7;
+            if (wasSample !== nextSample) {
+                this._crankTimer = 0.0;
+                this._crankEndMs = 0;
+            }
+        }
         if (this.truckModel && this.truckModel.userData && typeof this.truckModel.userData.setActiveEngineVariant === 'function') {
             this.truckModel.userData.setActiveEngineVariant(selected);
         }
         const labels = {
+            6: '🔊 Motor: Scania (padrão)',
+            7: '🔊 Motor: Scania Grave',
             1: '🔊 Motor 1: Cat 3406B (original)',
             2: '🔊 Motor 2: Mais rouco',
-            3: '🔊 Motor 3: Mais grave',
-            4: '🔊 Motor 4: Grave + rouco (padrão)',
+            4: '🔊 Motor 4: Grave + rouco',
             5: '🔊 Motor 5: Cummins N14 (vídeo 11s–41s)'
         };
         if (labels[selected]) {
@@ -302,6 +349,16 @@ export class KenworthW900 {
 
     toggleGameSound() {
         return this.toggleEngineSound();
+    }
+
+    setSfxVolume(volume) {
+        if (!this.engineSound) return 0.45;
+        return this.engineSound.setSfxVolume(volume);
+    }
+
+    getSfxVolume() {
+        if (!this.engineSound) return 0.45;
+        return this.engineSound.getSfxVolume();
     }
 
     Brake(breakFraction) {
@@ -490,6 +547,11 @@ export class KenworthW900 {
 
         entry.timerId = setTimeout(() => this._removeNotification(entry), durationMs);
         this._notifications.push(entry);
+
+        // Som de alerta apenas quando um novo aviso aparece (não a cada refresh do mesmo aviso)
+        if (type === 'warning' && this.engineSound && typeof this.engineSound.playAlertSound === 'function') {
+            this.engineSound.playAlertSound();
+        }
     }
 
     _removeNotification(entry) {

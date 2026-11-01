@@ -836,11 +836,11 @@ export class MobileControls {
         steerPad.id = 'mobile-steer-pad';
 
         const btnLeft = document.createElement('div');
-        btnLeft.className = 'mob-drive-btn mob-steer-btn';
+        btnLeft.className = 'mob-drive-btn mob-steer-btn mob-steer-left-btn';
         btnLeft.textContent = '◄';
 
         const btnRight = document.createElement('div');
-        btnRight.className = 'mob-drive-btn mob-steer-btn';
+        btnRight.className = 'mob-drive-btn mob-steer-btn mob-steer-right-btn';
         btnRight.textContent = '►';
 
         steerPad.appendChild(btnLeft);

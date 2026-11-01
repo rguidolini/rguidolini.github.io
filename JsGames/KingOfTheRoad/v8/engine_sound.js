@@ -1,20 +1,217 @@
 /**
- * Síntese física procedural em tempo real do motor Caterpillar 3406B (14.6L, 6 cilindros em linha,
- * injeção mecânica, ordem de ignição 1-5-3-6-2-4) turbinado com escapamentos verticais diretos de 8"
- * (Straight-Pipe Monster Stacks) em um Kenworth W900.
- *
- * Modela individualmente os 6 cilindros no ciclo de 720°, assimetria mecânica da bomba injetora e do
- * coletor de escape, modulação por turbulência de vórtices nos dutos, carcaça da turbina, colunas de ar
- * abertas de 8", assobio aerodinâmico do turbocompressor Garrett/Schwitzer nas puxadas e trocas de marcha,
- * freio-motor Jacobs (Jake Brake) em desaceleração, válvula pneumática Westinghouse do freio estacionário,
- * buzina a ar Columbia dupla de ferro fundido (~32 cm + ~26 cm, 100 PSI) e efeitos Foley físicos da carreta
- * (porta de casa batendo na entrada do pino-rei na 5ª roda e som de fechamento com trinco no engate/desengate via tecla T).
- *
- * Funciona tanto em contextos HTTPS (AudioWorkletNode) quanto HTTP não-seguros (ScriptProcessorNode),
- * 100% em JavaScript puro sem arquivos binários externos.
+ * Sistema de áudio do Kenworth W900:
+ *  - Partida e funcionamento normal do motor usando os áudios customizados `audio/start_up_engine.mp3` e
+ *    `audio/regular_engine.mp3`, concatenados sample-a-sample em um único AudioBuffer contínuo com loop
+ *    de fase alinhada e modulação dinâmica de RPM/carga/marchas Eaton Fuller.
+ *  - Síntese física procedural em tempo real para o calço/parada do motor, válvula pneumática Westinghouse
+ *    do freio estacionário, sopro do seletor de caixa, buzina a ar Columbia dupla de ferro fundido (100 PSI),
+ *    efeitos Foley físicos da carreta (5ª roda e tecla T) e stingers de vitória/falha de fase.
  */
 
-export const ENGINE_STARTUP_DURATION = 2.32;
+export const ENGINE_STARTUP_DURATION = 1.21;
+export const DEFAULT_ENGINE_VARIANT = 6;
+export const VALID_ENGINE_VARIANTS = [6, 7, 1, 2, 4, 5];
+// Nível geral dos sons que não são de motor (1.0 = volume original). Buzina e stingers usam 60% disso; Foley usa 90%.
+export const DEFAULT_SFX_VOLUME = 0.45;
+const STINGER_LEVEL = 0.60;
+// Som de alerta (acompanha as notificações de aviso), no mesmo nível relativo da buzina e dos stingers
+const ALERT_AUDIO_URL = new URL('./audio/alert.mp3', import.meta.url).href;
+const ALERT_LEVEL = 0.60;
+const ALERT_MIN_INTERVAL_MS = 600;
+
+const PROCEDURAL_STARTUP_DURATION = 2.32;
+const SCANIA_GRAVE_BASE_RATE = 0.78;
+const STARTUP_ENGINE_AUDIO_URL = new URL('./audio/start_up_engine.mp3', import.meta.url).href;
+const REGULAR_ENGINE_AUDIO_URL = new URL('./audio/regular_engine.mp3', import.meta.url).href;
+const BASE_SAMPLE_ENGINE_GAIN = 1.18;
+
+let _rawEngineBytesPromise = null;
+function fetchRawEngineAudioBytes() {
+    if (_rawEngineBytesPromise) return _rawEngineBytesPromise;
+    if (typeof fetch !== 'function') {
+        return Promise.reject(new Error('fetch unavailable'));
+    }
+    _rawEngineBytesPromise = Promise.all([
+        fetch(STARTUP_ENGINE_AUDIO_URL).then((r) => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.arrayBuffer();
+        }),
+        fetch(REGULAR_ENGINE_AUDIO_URL).then((r) => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.arrayBuffer();
+        })
+    ]).catch((err) => {
+        _rawEngineBytesPromise = null;
+        throw err;
+    });
+    return _rawEngineBytesPromise;
+}
+
+/**
+ * Concatena `start_up_engine` + `regular_engine` em um único AudioBuffer contínuo
+ * sem gap entre o fim da partida e o início do funcionamento normal, e constrói um
+ * ponto de loop com alinhamento de fase na região estacionária (12s..31.5s) antes do fade-out final.
+ */
+function buildSeamlessEngineAudioBuffer(ctx, startupBuf, regularBuf) {
+    const sr = startupBuf.sampleRate || ctx.sampleRate || 48000;
+    const stuRaw = startupBuf.getChannelData(0);
+    const regRaw = regularBuf.getChannelData(0);
+
+    // 1. Remove o silêncio inicial (~115 ms) da partida mantendo ~4 ms de pré-roll,
+    //    e descarta eventual zero-padding final de frame MP3 para emenda exata.
+    let firstActiveStu = 0;
+    for (let i = 0; i < stuRaw.length; i++) {
+        if (Math.abs(stuRaw[i]) > 0.0006) {
+            firstActiveStu = i;
+            break;
+        }
+    }
+    const preRoll = Math.round(0.004 * sr);
+    const stuStart = firstActiveStu > preRoll ? firstActiveStu - preRoll : 0;
+
+    let lastActiveStu = stuRaw.length - 1;
+    for (let i = stuRaw.length - 1; i >= stuStart; i--) {
+        if (Math.abs(stuRaw[i]) > 0.0008) {
+            lastActiveStu = i;
+            break;
+        }
+    }
+    const stuEnd = Math.max(stuStart + 1, lastActiveStu + 1);
+    const stuLen = stuEnd - stuStart;
+
+    // 2. Descarta eventual atraso de encoder MP3 (zeros iniciais) no começo de regular_engine.
+    let regStart = 0;
+    const maxLeadScan = Math.min(regRaw.length, Math.round(0.08 * sr));
+    for (let i = 0; i < maxLeadScan; i++) {
+        if (Math.abs(regRaw[i]) > 0.0008) {
+            regStart = i;
+            break;
+        }
+    }
+    const regAvail = Math.max(1, regRaw.length - regStart);
+
+    // 3. Seleciona loopStart (~12.0s) e busca loopEnd (~30.5s..31.6s) com máxima correlação de fase
+    //    em janela de 160 ms, evitando o fade-out final (49.5s..61.3s) do arquivo.
+    const xfadeLen = Math.min(Math.round(0.16 * sr), Math.floor(regAvail * 0.12));
+    let loopStartRel = Math.min(Math.round(12.0 * sr), Math.floor(regAvail * 0.25));
+    loopStartRel = Math.max(xfadeLen + 64, loopStartRel);
+
+    const searchMin = Math.min(regAvail - 32, Math.max(loopStartRel + xfadeLen * 2, Math.round(30.5 * sr)));
+    const searchMax = Math.min(regAvail - 16, Math.max(searchMin + 16, Math.round(31.6 * sr)));
+
+    let bestEndRel = searchMin;
+    let bestCorr = 0.0;
+
+    if (xfadeLen >= 64 && searchMax > searchMin) {
+        let refEnergy = 0.0;
+        for (let k = 0; k < xfadeLen; k += 8) {
+            const v = regRaw[regStart + loopStartRel - xfadeLen + k];
+            refEnergy += v * v;
+        }
+        const refNorm = Math.sqrt(refEnergy) + 1e-12;
+
+        let coarseBest = -2.0;
+        for (let cand = searchMin; cand <= searchMax; cand += 16) {
+            let dot = 0.0;
+            let segEnergy = 0.0;
+            const baseCand = regStart + cand - xfadeLen;
+            const baseRef = regStart + loopStartRel - xfadeLen;
+            for (let k = 0; k < xfadeLen; k += 8) {
+                const a = regRaw[baseRef + k];
+                const b = regRaw[baseCand + k];
+                dot += a * b;
+                segEnergy += b * b;
+            }
+            const corr = dot / (refNorm * Math.sqrt(segEnergy) + 1e-12);
+            if (corr > coarseBest) {
+                coarseBest = corr;
+                bestEndRel = cand;
+            }
+        }
+
+        const fineLo = Math.max(searchMin, bestEndRel - 20);
+        const fineHi = Math.min(searchMax, bestEndRel + 20);
+        let fineRefEnergy = 0.0;
+        for (let k = 0; k < xfadeLen; k += 2) {
+            const v = regRaw[regStart + loopStartRel - xfadeLen + k];
+            fineRefEnergy += v * v;
+        }
+        const fineRefNorm = Math.sqrt(fineRefEnergy) + 1e-12;
+
+        let fineBest = -2.0;
+        for (let cand = fineLo; cand <= fineHi; cand++) {
+            let dot = 0.0;
+            let segEnergy = 0.0;
+            const baseCand = regStart + cand - xfadeLen;
+            const baseRef = regStart + loopStartRel - xfadeLen;
+            for (let k = 0; k < xfadeLen; k += 2) {
+                const a = regRaw[baseRef + k];
+                const b = regRaw[baseCand + k];
+                dot += a * b;
+                segEnergy += b * b;
+            }
+            const corr = dot / (fineRefNorm * Math.sqrt(segEnergy) + 1e-12);
+            if (corr > fineBest) {
+                fineBest = corr;
+                bestEndRel = cand;
+            }
+        }
+        bestCorr = Math.max(0.0, Math.min(1.0, fineBest));
+    } else {
+        bestEndRel = Math.min(regAvail, Math.round(48.0 * sr));
+        loopStartRel = Math.min(Math.floor(bestEndRel * 0.25), Math.round(4.0 * sr));
+    }
+
+    const regKeepLen = Math.max(loopStartRel + 64, bestEndRel);
+    const totalLen = stuLen + regKeepLen;
+    const outBuf = ctx.createBuffer(1, totalLen, sr);
+    const out = outBuf.getChannelData(0);
+
+    // Copia start_up_engine com micro fade-in de 1 ms para evitar clique DC na largada
+    for (let i = 0; i < stuLen; i++) {
+        out[i] = stuRaw[stuStart + i];
+    }
+    const headFade = Math.min(48, stuLen);
+    for (let i = 0; i < headFade; i++) {
+        out[i] *= i / headFade;
+    }
+
+    // Apenda regular_engine imediatamente após start_up_engine
+    for (let i = 0; i < regKeepLen; i++) {
+        out[stuLen + i] = regRaw[regStart + i];
+    }
+
+    // Suaviza micro-degrau residual (< 1 ms) caso o decodificador MP3 do navegador tenha deslocamento mínimo
+    if (stuLen > 0 && regKeepLen > 64) {
+        const seamStep = out[stuLen - 1] - out[stuLen];
+        const declickLen = 48;
+        for (let k = 0; k < declickLen; k++) {
+            const w = 0.5 * (1.0 + Math.cos(Math.PI * ((k + 1) / declickLen)));
+            out[stuLen + k] += seamStep * w;
+        }
+    }
+
+    // Crossfade de fase alinhada nos últimos 160 ms antes de loopEnd para que loopEnd -> loopStart seja 100% contínuo
+    if (xfadeLen >= 32 && regKeepLen > xfadeLen + loopStartRel) {
+        const dstStart = stuLen + regKeepLen - xfadeLen;
+        const refStart = regStart + loopStartRel - xfadeLen;
+        const tailStart = regStart + regKeepLen - xfadeLen;
+        for (let k = 0; k < xfadeLen; k++) {
+            const u = 0.5 * (1.0 - Math.cos(Math.PI * ((k + 1) / xfadeLen)));
+            const a = regRaw[tailStart + k];
+            const b = regRaw[refStart + k];
+            const energyNorm = Math.sqrt((1.0 - u) * (1.0 - u) + u * u + 2.0 * u * (1.0 - u) * bestCorr);
+            out[dstStart + k] = ((1.0 - u) * a + u * b) / Math.max(0.7071, energyNorm);
+        }
+    }
+
+    return {
+        buffer: outBuf,
+        startupDurationSec: stuLen / sr,
+        loopStartSec: (stuLen + loopStartRel) / sr,
+        loopEndSec: (stuLen + regKeepLen) / sr
+    };
+}
 
 function createW900DspCore(sampleRate) {
     const fs = sampleRate || 48000;
@@ -199,11 +396,11 @@ function createW900DspCore(sampleRate) {
         return h.amp * (Math.PI / (2.0 * h.len)) * Math.sin((Math.PI * (k + 0.5)) / h.len);
     };
 
-    // Ordem de ignição 1-5-3-6-2-4 no ciclo de 720° com 5 perfis acústicos selecionáveis em tempo real:
+    // Ordem de ignição 1-5-3-6-2-4 no ciclo de 720° com 4 perfis procedurais selecionáveis em tempo real
+    // (além dos 2 perfis sampleados Scania = #6 [PADRÃO] e Scania Grave = #7):
     //  1 = Original (Cat 3406B Straight Pipe)
     //  2 = Mais rouco (maior aspereza de injeção, turbulência de vórtices no coletor e rasgado médio-grave)
-    //  3 = Mais grave (cadência mais baixa, pulso mais largo, ponteiras mais longas e peso subgrave 55-140 Hz)
-    //  4 = Grave + rouco [PADRÃO] (combina subgrave encorpado de #3 com a rouquidão e saturação de coletor de #2)
+    //  4 = Grave + rouco (combina subgrave encorpado com rouquidão e saturação de coletor)
     //  5 = Cummins N14 Celect Plus / ZeeMods (vídeo 11s-41s: marcha lenta eletrônica estalada, coletor 3+3, ponteiras 5" e turbina Holset HT60 cantando)
     const ENGINE_PROFILES = {
         1: {
@@ -245,26 +442,6 @@ function createW900DspCore(sampleRate) {
             turboUpTau: 0.42, turboDownTau: 0.85,
             turboBase: 1860.0, turboSpan: 1520.0, turboQ: 17.5, turboTone: 0.0070, turboMul: 0.82,
             dcHz: 22.0, outTrim: 0.82
-        },
-        3: {
-            rpmScale: 0.89, lopeAmp: 1.05,
-            cylGain: [0.78, 1.05, 1.25, 0.86, 0.94, 1.14],
-            jit: 0.11, halfOrderRasp: 0.0,
-            alphaBase: 18.5, alphaSharp: 18.5, slugGain: 0.92, crackBase: 0.24, crackSharp: 0.88,
-            vortexHz: 105.0, vortexMod: 1.05,
-            driveBase: 1.18, driveSharp: 1.45, asym: 0.24,
-            fc1Base: 182.0, fc1Rpm: 175.0, fc1Load: 265.0, fc1Jake: 420.0,
-            fc2Base: 620.0, fc2Sharp: 350.0, fc2Rpm: 220.0,
-            pipeDelayL: 0.0152, pipeDelayR: 0.0164, pipeRefl: -0.36, pipeLpL: 330.0, pipeLpR: 315.0,
-            boomFL: 55.0, boomFR: 53.0, boomQ: 1.05, boomDb: 8.4,
-            growlFL: 136.0, growlFR: 144.0, growlQ: 1.18, growlDb: 7.2,
-            barkFL: 345.0, barkFR: 362.0, barkQ: 1.25, barkDb: 3.4,
-            ringDb: 0.0,
-            roarScale: 0.72, crackRoarMul: 0.68, subPunch: 0.24,
-            clatF1: 480.0, clatF2: 980.0, clatF3: 1820.0, clatMul: 0.66, clatWin: 0.060,
-            turboUpTau: 0.46, turboDownTau: 0.90,
-            turboBase: 1640.0, turboSpan: 1380.0, turboQ: 18.0, turboTone: 0.0065, turboMul: 0.78,
-            dcHz: 14.0, outTrim: 0.88
         },
         4: {
             rpmScale: 0.89, lopeAmp: 1.38,
@@ -494,14 +671,14 @@ function createW900DspCore(sampleRate) {
     let curTurbo = 0.06;
     let curJake = 0.0;
     let curMasterGain = 0.0;
-    let curHornGain = 1.0;
+    let curHornGain = 0.45;
 
     let targetRpm = 595.0;
     let targetLoad = 0.18;
     let targetTurbo = 0.06;
     let targetJake = 0.0;
     let targetMasterGain = 1.0;
-    let targetHornGain = 1.0;
+    let targetHornGain = 0.45;
 
     // Estado da buzina a ar Columbia dupla de ferro fundido (corneta longa 315.5 Hz + corneta curta 377.0 Hz)
     let hornGate = false;
@@ -515,7 +692,11 @@ function createW900DspCore(sampleRate) {
     let hornJitter1 = 0.0;
     let hornJitter2 = 0.0;
 
-    // Estado da ignição/motor (começa desligado em toda fase; tecla E liga com partida Cummins N14 11s–13s e desliga por corte de diesel)
+    // Estado da ignição/motor:
+    // Por padrão (`sampleEngineMode = true`), partida + funcionamento normal vêm dos áudios customizados
+    // (`start_up_engine.mp3` + `regular_engine.mp3`), enquanto o DSP core cuida apenas do calço/parada e dos SFX
+    // (buzina Columbia, freio a ar, seletor Eaton Fuller, 5ª roda e engate da carreta).
+    let sampleEngineMode = true;
     let engineState = 'off'; // 'off' | 'starting' | 'running' | 'stopping'
     let engineEnv = 0.0;
     const engOnSmooth = 1.0 - Math.exp(-invFs / 0.008);
@@ -691,6 +872,29 @@ function createW900DspCore(sampleRate) {
         filterUpdateCounter = 0;
     };
 
+    const setSampleEngineMode = (enabled) => {
+        sampleEngineMode = Boolean(enabled);
+        if (sampleEngineMode && (engineState === 'starting' || engineState === 'running')) {
+            // Desativa suavemente os cilindros procedurais via engOffSmooth (sem clique)
+            engineState = 'off';
+        }
+    };
+
+    const triggerEngineResumeRunning = () => {
+        if (sampleEngineMode) return;
+        solenoidFired = true;
+        startMountFired = true;
+        stopShudderFired = false;
+        solenoidHammer.rem = 0;
+        startMountHammer.rem = 0;
+        stopShudderHammer.rem = 0;
+        curRpm = Math.max(595.0, targetRpm || 595.0) * prof.rpmScale;
+        curLoad = Math.max(0.18, targetLoad || 0.18);
+        curTurbo = Math.max(0.06, targetTurbo || 0.06);
+        curJake = targetJake || 0.0;
+        engineState = 'running';
+    };
+
     const triggerEngineStart = () => {
         startClock = 0.0;
         solenoidFired = false;
@@ -703,7 +907,12 @@ function createW900DspCore(sampleRate) {
         resetDampedMode(starterBellMode3);
         resetDampedMode(stopMountMode1);
         resetDampedMode(stopMountMode2);
-        // Fase inicial posicionada na subida de compressão do cilindro #2 para que o eixo gire antes do 1º sopro grosso no escape
+        if (sampleEngineMode) {
+            engineState = 'off';
+            engineEnv = 0.0;
+            return;
+        }
+        // Fallback procedural apenas caso o carregamento de áudio falhe (ex.: protocolo file://)
         cyclePhase = 0.768;
         starterPhase = 0.0;
         crankBlowPhase = 0.0;
@@ -715,10 +924,16 @@ function createW900DspCore(sampleRate) {
     };
 
     const triggerEngineStop = () => {
-        if (engineState === 'off') return;
+        if (!sampleEngineMode && engineState === 'off') return;
         stopClock = 0.0;
         stopShudderFired = false;
-        stopInitialRpm = Math.max(190.0, curRpm / Math.max(0.75, prof.rpmScale));
+        if (sampleEngineMode) {
+            curRpm = Math.max(480.0, targetRpm || 595.0);
+            stopInitialRpm = curRpm;
+            engineEnv = 0.62;
+        } else {
+            stopInitialRpm = Math.max(190.0, curRpm / Math.max(0.75, prof.rpmScale));
+        }
         solenoidHammer.rem = 0;
         startMountHammer.rem = 0;
         stopShudderHammer.rem = 0;
@@ -1490,8 +1705,8 @@ function createW900DspCore(sampleRate) {
                 foleyRoomEnergy = 0.0;
             }
 
-            const foleyInL = fastTanh((foleyDryL + foleyRoomL + slamHallL) * 1.32) * 0.94 * curHornGain;
-            const foleyInR = fastTanh((foleyDryR + foleyRoomR + slamHallR) * 1.32) * 0.94 * curHornGain;
+            const foleyInL = fastTanh((foleyDryL + foleyRoomL + slamHallL) * 1.32) * 0.94;
+            const foleyInR = fastTanh((foleyDryR + foleyRoomR + slamHallR) * 1.32) * 0.94;
             const foleyHpL = foleyInL - foleyDcInL + foleyDcPole * foleyDcOutL;
             foleyDcInL = foleyInL;
             foleyDcOutL = foleyHpL;
@@ -1610,8 +1825,10 @@ function createW900DspCore(sampleRate) {
             const engCoreL = (stL * 0.37 + stR * 0.10 + subL + mech * prof.clatMul + turboSig * prof.turboMul) * prof.outTrim + starterAuxL;
             const engCoreR = (stR * 0.37 + stL * 0.10 + subR + mech * prof.clatMul + turboSig * prof.turboMul) * prof.outTrim + starterAuxR;
             const pneuGain = curHornGain * engineDuck;
-            const rawL = engCoreL * engGain + pneu * pneuGain + (hornOutL + yardEchoL) * curHornGain;
-            const rawR = engCoreR * engGain + pneu * pneuGain + (hornOutR + yardEchoR) * curHornGain;
+            // Buzina calibrada em 60% do nível geral de efeitos
+            const hornLevel = curHornGain * 0.60;
+            const rawL = engCoreL * engGain + pneu * pneuGain + (hornOutL + yardEchoL) * hornLevel;
+            const rawR = engCoreR * engGain + pneu * pneuGain + (hornOutR + yardEchoR) * hornLevel;
 
             const hpL = rawL - dcInL + dcPole * dcOutL;
             dcInL = rawL;
@@ -1624,8 +1841,10 @@ function createW900DspCore(sampleRate) {
             postLpL += (hpL - postLpL) * postLpA;
             postLpR += (hpR - postLpR) * postLpA;
 
-            outL[i] = fastTanh(postLpL * 0.92 + foleyLpL * curHornGain) * 0.88;
-            outR[i] = fastTanh(postLpR * 0.92 + foleyLpR * curHornGain) * 0.88;
+            // Foley (5ª roda e engate/desengate) calibrado em 90% do nível geral de efeitos
+            const foleyLevel = curHornGain * 0.90;
+            outL[i] = fastTanh(postLpL * 0.92 + foleyLpL * foleyLevel) * 0.88;
+            outR[i] = fastTanh(postLpR * 0.92 + foleyLpR * foleyLevel) * 0.88;
         }
     };
 
@@ -1633,6 +1852,7 @@ function createW900DspCore(sampleRate) {
         setTargets,
         setHorn,
         setVariant,
+        setSampleEngineMode,
         triggerAirBrake,
         triggerShiftAir,
         triggerFifthWheelCouple,
@@ -1641,6 +1861,7 @@ function createW900DspCore(sampleRate) {
         triggerTrailerLock,
         triggerTrailerUnlock,
         triggerEngineStart,
+        triggerEngineResumeRunning,
         triggerEngineStop,
         resetEngineOff,
         triggerStartup,
@@ -1975,11 +2196,11 @@ export function renderOutcomeStinger(kind, sampleRate = 48000) {
 }
 
 
-// Escalonamento Eaton Fuller calibrado para manobras de pátio e arrancadas na pista (km/h a 1.820 RPM)
-const FORWARD_GEAR_TOP_KMH = [6.5, 11.5, 18.0, 26.5, 38.0, 54.0];
+// Escalonamento longo de 4 marchas calibrado para "esticar" bem as notas do motor no pátio e na pista (km/h a 2.060 RPM)
+const FORWARD_GEAR_TOP_KMH = [12.5, 24.5, 38.5, 56.0];
 const IDLE_RPM = 595.0;
-const SHIFT_RPM = 1820.0;
-const MAX_RPM = 1980.0;
+const SHIFT_RPM = 2060.0;
+const MAX_RPM = 2180.0;
 
 export class W900EngineSound {
     constructor() {
@@ -1990,23 +2211,340 @@ export class W900EngineSound {
         this.dspCore = null;
         this.muted = false;
         this.frozen = false;
+        this.sfxVolume = DEFAULT_SFX_VOLUME;
         this.hornActive = false;
         this._hornInputHeld = false;
         this.engineRunning = false;
         this.started = false;
         this._initializing = false;
-        this.variant = 4; // 1..5 perfis de motor (#4: Grave + rouco como padrão)
+        this.variant = DEFAULT_ENGINE_VARIANT; // 6: Scania (padrão), 7: Scania Grave, 1, 2, 4, 5: procedurais
         this._stingerCache = new Map();
         this._activeStinger = null;
         this._stingerReqId = 0;
+        this._alertBuffer = null;
+        this._alertLoadPromise = null;
+        this._lastAlertMs = -Infinity;
 
-        this.gear = 1; // 1..6 à frente, -1 em ré
+        this._sampleEngineData = null;
+        this._sampleEngineLoadPromise = null;
+        this._sampleEngineFailed = false;
+        this._activeSampleEngine = null;
+        this._sampleEngineGen = 0;
+        this._duckUntilMs = 0;
+
+        this.gear = 1; // 1..4 à frente, -1 em ré
         this.rpm = 0.0;
         this.load = 0.0;
         this.turbo = 0.0;
         this.jake = 0.0;
         this.shiftTimer = 0.0;
         this.sinceLastShift = 1.0;
+
+        if (typeof window !== 'undefined' && window.location && window.location.protocol !== 'file:') {
+            fetchRawEngineAudioBytes().catch(() => {});
+        }
+    }
+
+    _normalizeVariant(variantId) {
+        const parsed = Number(variantId);
+        return VALID_ENGINE_VARIANTS.includes(parsed) ? parsed : DEFAULT_ENGINE_VARIANT;
+    }
+
+    _isSampleVariant(variantId = this.variant) {
+        return (variantId === 6 || variantId === 7) && !this._sampleEngineFailed;
+    }
+
+    _sampleProfileForVariant(variantId = this.variant) {
+        if (variantId === 7) {
+            // Scania Grave: pitch base mais baixo (0.78x -> ~1.45x no corte) + subgrave cheio (88 Hz / 105 Hz)
+            // abrindo progressivamente até 2.35 kHz ao esticar as marchas sem perder o peso cavernoso
+            return {
+                baseRate: SCANIA_GRAVE_BASE_RATE,
+                rateSpan: 0.64,
+                idleLowDb: 8.5,
+                rpmLowDb: 1.5,
+                loadLowDb: 1.4,
+                idleChestDb: 5.0,
+                rpmChestDb: 1.0,
+                loadChestDb: 1.0,
+                idleMidDb: -2.5,
+                rpmMidDb: 0.8,
+                loadMidDb: 1.5,
+                idleLpHz: 1320.0,
+                redlineLpHz: 2350.0,
+                gainTrim: 0.72,
+                rpmGainComp: 0.10,
+                loadGainBoost: 0.18
+            };
+        }
+        // Scania (padrão): 100% puro na marcha lenta (1.00x) e esticando até ~1.82x com compensação dinâmica de
+        // corpo (88/105 Hz) e controle suave de brilho em alta rotação para nunca afinar o timbre
+        return {
+            baseRate: 1.0,
+            rateSpan: 0.78,
+            idleLowDb: 0.0,
+            rpmLowDb: 4.8,
+            loadLowDb: 2.2,
+            idleChestDb: 0.0,
+            rpmChestDb: 3.4,
+            loadChestDb: 0.0,
+            idleMidDb: 0.0,
+            rpmMidDb: -1.4,
+            loadMidDb: 1.8,
+            idleLpHz: 20000.0,
+            redlineLpHz: 3100.0,
+            gainTrim: 1.0,
+            rpmGainComp: -0.06,
+            loadGainBoost: 0.16
+        };
+    }
+
+    getStartupDuration() {
+        if (this._isSampleVariant()) {
+            const baseDur = this._sampleEngineData ? this._sampleEngineData.startupDurationSec : ENGINE_STARTUP_DURATION;
+            const prof = this._sampleProfileForVariant();
+            return baseDur / Math.max(0.5, prof.baseRate);
+        }
+        return PROCEDURAL_STARTUP_DURATION;
+    }
+
+    _nowMs() {
+        return (typeof performance !== 'undefined' && typeof performance.now === 'function')
+            ? performance.now()
+            : Date.now();
+    }
+
+    _requestSampleDuck(durationSec) {
+        const dMs = Math.max(80, Math.min(2000, (Number(durationSec) || 0.4) * 1000.0));
+        this._duckUntilMs = Math.max(this._duckUntilMs, this._nowMs() + dMs);
+        this._updateSampleEngineParams();
+    }
+
+    _ensureSampleEngineDecoded() {
+        if (this._sampleEngineData) return Promise.resolve(this._sampleEngineData);
+        if (this._sampleEngineLoadPromise) return this._sampleEngineLoadPromise;
+        if (!this.audioCtx || this._sampleEngineFailed) return Promise.resolve(null);
+
+        const ctx = this.audioCtx;
+        this._sampleEngineLoadPromise = fetchRawEngineAudioBytes()
+            .then(([stuBytes, regBytes]) => Promise.all([
+                ctx.decodeAudioData(stuBytes.slice(0)),
+                ctx.decodeAudioData(regBytes.slice(0))
+            ]))
+            .then(([stuBuf, regBuf]) => {
+                const built = buildSeamlessEngineAudioBuffer(ctx, stuBuf, regBuf);
+                this._sampleEngineData = built;
+                this._sampleEngineLoadPromise = null;
+                return built;
+            })
+            .catch(() => {
+                this._sampleEngineLoadPromise = null;
+                this._sampleEngineFailed = true;
+                this._postCommand({ type: 'sampleMode', enabled: false });
+                this._postCommand({ type: 'variant', variant: this.variant });
+                if (this.engineRunning) {
+                    this._postCommand({ type: 'engineStart' });
+                }
+                return null;
+            });
+        return this._sampleEngineLoadPromise;
+    }
+
+    _disposeActiveSampleEngine(windDown = false) {
+        const prev = this._activeSampleEngine;
+        if (!prev) return;
+        this._activeSampleEngine = null;
+        prev.stopping = true;
+        try {
+            const ctx = prev.ctx;
+            const now = ctx.currentTime;
+            prev.src.playbackRate.cancelScheduledValues(now);
+            prev.gain.gain.cancelScheduledValues(now);
+            const curRate = Math.max(0.25, prev.src.playbackRate.value || 1.0);
+            const curGain = Math.max(0.0001, prev.gain.gain.value || 0.0001);
+            prev.src.playbackRate.setValueAtTime(curRate, now);
+            prev.gain.gain.setValueAtTime(curGain, now);
+            if (windDown) {
+                const dur = now < prev.regularStartCtxTime ? 0.32 : 0.46;
+                const stopRate = Math.max(0.28, curRate * 0.42);
+                prev.src.playbackRate.exponentialRampToValueAtTime(stopRate, now + dur);
+                prev.gain.gain.setValueAtTime(curGain, now + Math.min(0.05, dur * 0.12));
+                prev.gain.gain.exponentialRampToValueAtTime(0.0001, now + dur + 0.02);
+                prev.src.stop(now + dur + 0.04);
+            } else {
+                prev.gain.gain.linearRampToValueAtTime(0.0, now + 0.012);
+                prev.src.stop(now + 0.016);
+            }
+        } catch (_err) {
+            // Ignora caso o nó já tenha encerrado
+        }
+    }
+
+    _launchSampleEngineNode(data, silent = false) {
+        if (!this.audioCtx || !data || !this.engineRunning || !this._isSampleVariant()) return;
+        const ctx = this.audioCtx;
+        const now = ctx.currentTime;
+        const prof = this._sampleProfileForVariant();
+
+        const src = ctx.createBufferSource();
+        src.buffer = data.buffer;
+        src.loop = true;
+        src.loopStart = data.loopStartSec;
+        src.loopEnd = data.loopEndSec;
+
+        const lowShelf = ctx.createBiquadFilter();
+        lowShelf.type = 'lowshelf';
+        lowShelf.frequency.value = 88.0;
+        lowShelf.gain.value = prof.idleLowDb;
+        lowShelf.frequency.setValueAtTime(88.0, now);
+        lowShelf.gain.setValueAtTime(prof.idleLowDb, now);
+
+        const chestPeak = ctx.createBiquadFilter();
+        chestPeak.type = 'peaking';
+        chestPeak.frequency.value = 105.0;
+        chestPeak.Q.value = 1.15;
+        chestPeak.gain.value = prof.idleChestDb;
+        chestPeak.frequency.setValueAtTime(105.0, now);
+        chestPeak.Q.setValueAtTime(1.15, now);
+        chestPeak.gain.setValueAtTime(prof.idleChestDb, now);
+
+        const midPeak = ctx.createBiquadFilter();
+        midPeak.type = 'peaking';
+        midPeak.frequency.value = 420.0;
+        midPeak.Q.value = 0.90;
+        midPeak.gain.value = prof.idleMidDb;
+        midPeak.frequency.setValueAtTime(420.0, now);
+        midPeak.Q.setValueAtTime(0.90, now);
+        midPeak.gain.setValueAtTime(prof.idleMidDb, now);
+
+        const highLp = ctx.createBiquadFilter();
+        highLp.type = 'lowpass';
+        highLp.frequency.value = prof.idleLpHz;
+        highLp.Q.value = 0.72;
+        highLp.frequency.setValueAtTime(prof.idleLpHz, now);
+        highLp.Q.setValueAtTime(0.72, now);
+
+        const gain = ctx.createGain();
+        const initGain = BASE_SAMPLE_ENGINE_GAIN * prof.gainTrim * (this.frozen ? 0.28 : 1.0);
+        gain.gain.value = 0.0001;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(initGain, now + 0.008);
+        src.playbackRate.value = prof.baseRate;
+        src.playbackRate.setValueAtTime(prof.baseRate, now);
+
+        src.connect(lowShelf);
+        lowShelf.connect(chestPeak);
+        chestPeak.connect(midPeak);
+        midPeak.connect(highLp);
+        highLp.connect(gain);
+        const masterOut = this._ensureMasterBus() || ctx.destination;
+        gain.connect(masterOut);
+
+        const offset = silent ? data.startupDurationSec : 0.0;
+        const startupWallSec = data.startupDurationSec / Math.max(0.5, prof.baseRate);
+        const regularStartCtxTime = silent ? now : now + startupWallSec;
+        const handle = {
+            src,
+            lowShelf,
+            chestPeak,
+            midPeak,
+            highLp,
+            gain,
+            ctx,
+            startCtxTime: now,
+            fadeInEndCtxTime: now + 0.010,
+            regularStartCtxTime,
+            profileRate: prof.baseRate,
+            stopping: false
+        };
+        this._activeSampleEngine = handle;
+        src.onended = () => {
+            if (this._activeSampleEngine === handle) {
+                this._activeSampleEngine = null;
+            }
+            try {
+                src.disconnect();
+                lowShelf.disconnect();
+                chestPeak.disconnect();
+                midPeak.disconnect();
+                highLp.disconnect();
+                gain.disconnect();
+            } catch (_err) {
+                // Nó já desconectado
+            }
+        };
+        src.start(now, offset);
+    }
+
+    _startSampleEngine(silent = false) {
+        if (!this.audioCtx) {
+            this.start();
+        }
+        if (!this.audioCtx || !this._isSampleVariant()) return;
+        const gen = ++this._sampleEngineGen;
+        this._disposeActiveSampleEngine(false);
+
+        if (this._sampleEngineData) {
+            this._launchSampleEngineNode(this._sampleEngineData, silent);
+            return;
+        }
+        this._ensureSampleEngineDecoded().then((data) => {
+            if (!data || gen !== this._sampleEngineGen || !this.engineRunning || !this._isSampleVariant()) return;
+            this._disposeActiveSampleEngine(false);
+            this._launchSampleEngineNode(data, silent);
+        });
+    }
+
+    _updateSampleEngineParams() {
+        const h = this._activeSampleEngine;
+        if (!h || h.stopping) return;
+        const now = h.ctx.currentTime;
+        const prof = this._sampleProfileForVariant();
+
+        const sfxScale = this.muted ? 0.0 : this.sfxVolume;
+        let duck = 1.0;
+        if (this._nowMs() < this._duckUntilMs) {
+            duck *= 1.0 - 0.48 * sfxScale;
+        }
+        if (this.hornActive) {
+            duck *= 1.0 - 0.18 * sfxScale;
+        }
+        const freezeScalar = this.frozen ? 0.28 : 1.0;
+
+        // Durante start_up_engine ou quando congelado, mantém a taxa base e EQ de marcha lenta do perfil (Scania ou Scania Grave)
+        if (now < h.regularStartCtxTime || this.frozen) {
+            const tau = this.frozen ? 0.05 : 0.025;
+            h.src.playbackRate.setTargetAtTime(prof.baseRate, now, tau);
+            h.lowShelf.gain.setTargetAtTime(prof.idleLowDb, now, 0.03);
+            h.chestPeak.gain.setTargetAtTime(prof.idleChestDb, now, 0.03);
+            h.midPeak.gain.setTargetAtTime(prof.idleMidDb, now, 0.03);
+            h.highLp.frequency.setTargetAtTime(prof.idleLpHz, now, 0.03);
+            if (now >= h.fadeInEndCtxTime) {
+                h.gain.gain.setTargetAtTime(BASE_SAMPLE_ENGINE_GAIN * prof.gainTrim * freezeScalar * duck, now, 0.028);
+            }
+            return;
+        }
+
+        const rpmNorm = Math.max(0.0, Math.min(1.12, (this.rpm - IDLE_RPM) / (SHIFT_RPM - IDLE_RPM)));
+        const rpmCurve = Math.min(1.0, rpmNorm);
+        const loadExcess = Math.max(0.0, Math.min(1.0, (this.load - 0.18) / 0.82));
+        const targetRate = prof.baseRate + prof.rateSpan * Math.pow(rpmNorm, 0.88) + 0.032 * loadExcess;
+        const lowDb = prof.idleLowDb + prof.rpmLowDb * rpmCurve + prof.loadLowDb * loadExcess;
+        const chestDb = prof.idleChestDb + prof.rpmChestDb * rpmCurve + prof.loadChestDb * loadExcess;
+        const midDb = prof.idleMidDb + prof.rpmMidDb * rpmCurve + prof.loadMidDb * loadExcess + 1.0 * Math.max(0.0, this.jake);
+        const lpHz = prof.idleLpHz * Math.pow(prof.redlineLpHz / prof.idleLpHz, Math.pow(rpmCurve, 0.85));
+        const shiftCut = this.shiftTimer > 0 ? 0.86 : 1.0;
+        const gainMult = Math.max(0.75, 1.0 + prof.rpmGainComp * rpmCurve + prof.loadGainBoost * loadExcess);
+        const targetGain = BASE_SAMPLE_ENGINE_GAIN * prof.gainTrim * gainMult * shiftCut * duck;
+
+        h.src.playbackRate.setTargetAtTime(targetRate, now, 0.034);
+        h.lowShelf.gain.setTargetAtTime(lowDb, now, 0.042);
+        h.chestPeak.gain.setTargetAtTime(chestDb, now, 0.042);
+        h.midPeak.gain.setTargetAtTime(midDb, now, 0.042);
+        h.highLp.frequency.setTargetAtTime(lpHz, now, 0.042);
+        if (now >= h.fadeInEndCtxTime) {
+            h.gain.gain.setTargetAtTime(targetGain, now, 0.030);
+        }
     }
 
     _ensureMasterBus() {
@@ -2028,6 +2566,8 @@ export class W900EngineSound {
         if (!this.audioCtx) {
             this.audioCtx = new AudioCtx();
             this._ensureMasterBus();
+            this._ensureSampleEngineDecoded();
+            this._ensureAlertDecoded();
             this._setupAudioGraph();
         }
     }
@@ -2076,6 +2616,8 @@ export class W900EngineSound {
                                     this.core.setTargets(msg);
                                 } else if (msg.type === 'variant') {
                                     this.core.setVariant(msg.variant);
+                                } else if (msg.type === 'sampleMode') {
+                                    this.core.setSampleEngineMode(msg.enabled);
                                 } else if (msg.type === 'horn') {
                                     this.core.setHorn(msg.active);
                                 } else if (msg.type === 'airBrake') {
@@ -2094,6 +2636,8 @@ export class W900EngineSound {
                                     this.core.triggerTrailerUnlock();
                                 } else if (msg.type === 'engineStart' || msg.type === 'startup') {
                                     this.core.triggerEngineStart();
+                                } else if (msg.type === 'engineResumeRunning') {
+                                    this.core.triggerEngineResumeRunning();
                                 } else if (msg.type === 'engineStop') {
                                     this.core.triggerEngineStop();
                                 } else if (msg.type === 'engineResetOff') {
@@ -2130,7 +2674,9 @@ export class W900EngineSound {
                 this.workletNode = node;
                 this.started = true;
                 this._initializing = false;
-                if (this.variant !== 4) {
+                const sampleEnabled = this._isSampleVariant();
+                this._postCommand({ type: 'sampleMode', enabled: sampleEnabled });
+                if (!sampleEnabled) {
                     this._postCommand({ type: 'variant', variant: this.variant });
                 }
                 this._syncState();
@@ -2138,7 +2684,9 @@ export class W900EngineSound {
                     this._postCommand({ type: 'horn', active: true });
                 }
                 if (this.engineRunning) {
-                    this._postCommand({ type: 'engineStart' });
+                    if (!sampleEnabled) {
+                        this._postCommand({ type: 'engineStart' });
+                    }
                 } else {
                     this._postCommand({ type: 'engineResetOff' });
                 }
@@ -2152,6 +2700,11 @@ export class W900EngineSound {
 
         // Fallback universal para contextos HTTP não-seguros (ex.: servidor de desenvolvimento)
         this.dspCore = createW900DspCore(ctx.sampleRate);
+        const sampleEnabled = this._isSampleVariant();
+        this.dspCore.setSampleEngineMode(sampleEnabled);
+        if (!sampleEnabled) {
+            this.dspCore.setVariant(this.variant);
+        }
         const scriptNode = ctx.createScriptProcessor(1024, 0, 2);
         scriptNode.onaudioprocess = (audioEvent) => {
             const outL = audioEvent.outputBuffer.getChannelData(0);
@@ -2165,15 +2718,14 @@ export class W900EngineSound {
         this.scriptNode = scriptNode;
         this.started = true;
         this._initializing = false;
-        if (this.variant !== 4) {
-            this._postCommand({ type: 'variant', variant: this.variant });
-        }
         this._syncState();
         if (this.hornActive && !this.muted) {
             this._postCommand({ type: 'horn', active: true });
         }
         if (this.engineRunning) {
-            this._postCommand({ type: 'engineStart' });
+            if (!sampleEnabled) {
+                this._postCommand({ type: 'engineStart' });
+            }
         } else {
             this._postCommand({ type: 'engineResetOff' });
         }
@@ -2187,6 +2739,8 @@ export class W900EngineSound {
                 this.dspCore.setTargets(msg);
             } else if (msg.type === 'variant') {
                 this.dspCore.setVariant(msg.variant);
+            } else if (msg.type === 'sampleMode') {
+                this.dspCore.setSampleEngineMode(msg.enabled);
             } else if (msg.type === 'horn') {
                 this.dspCore.setHorn(msg.active);
             } else if (msg.type === 'airBrake') {
@@ -2205,6 +2759,8 @@ export class W900EngineSound {
                 this.dspCore.triggerTrailerUnlock();
             } else if (msg.type === 'engineStart' || msg.type === 'startup') {
                 this.dspCore.triggerEngineStart();
+            } else if (msg.type === 'engineResumeRunning') {
+                this.dspCore.triggerEngineResumeRunning();
             } else if (msg.type === 'engineStop') {
                 this.dspCore.triggerEngineStop();
             } else if (msg.type === 'engineResetOff') {
@@ -2231,8 +2787,34 @@ export class W900EngineSound {
             turbo: this.turbo,
             jake: this.jake,
             masterGain: this._computeMasterGain(),
-            hornGain: this.muted ? 0.0 : 1.0
+            hornGain: this.muted ? 0.0 : this.sfxVolume
         });
+        this._updateSampleEngineParams();
+    }
+
+    setSfxVolume(volume) {
+        const parsed = Number(volume);
+        const clamped = Number.isFinite(parsed)
+            ? Math.max(0.0, Math.min(1.0, parsed))
+            : DEFAULT_SFX_VOLUME;
+        this.sfxVolume = clamped;
+        if (this._activeStinger && this._activeStinger.gain && this._activeStinger.ctx) {
+            try {
+                const now = this._activeStinger.ctx.currentTime;
+                const nextGain = 0.92 * STINGER_LEVEL * (this.muted ? 0.0 : clamped);
+                this._activeStinger.gain.gain.cancelScheduledValues(now);
+                this._activeStinger.gain.gain.setValueAtTime(this._activeStinger.gain.gain.value, now);
+                this._activeStinger.gain.gain.setTargetAtTime(nextGain, now, 0.015);
+            } catch (_err) {
+                // Ignora caso o AudioNode já tenha encerrado
+            }
+        }
+        this._syncState();
+        return this.sfxVolume;
+    }
+
+    getSfxVolume() {
+        return this.sfxVolume;
     }
 
     setEngineRunning(isRunning, silent = false) {
@@ -2250,28 +2832,39 @@ export class W900EngineSound {
             if (!this.muted) {
                 this.resume();
             }
-            this._syncState();
             if (!wasRunning) {
-                this._postCommand({ type: 'engineStart' });
+                if (this._isSampleVariant()) {
+                    this._postCommand({ type: 'sampleMode', enabled: true });
+                    this._startSampleEngine(Boolean(silent));
+                } else {
+                    this._postCommand({ type: 'sampleMode', enabled: false });
+                    this._postCommand({ type: 'variant', variant: this.variant });
+                    this._postCommand({ type: silent ? 'engineResumeRunning' : 'engineStart' });
+                }
             }
+            this._syncState();
         } else {
             this.gear = 1;
             this.shiftTimer = 0.0;
             this.jake = 0.0;
+            this._sampleEngineGen += 1;
             if (silent) {
                 this.rpm = 0.0;
                 this.load = 0.0;
                 this.turbo = 0.0;
+                this._disposeActiveSampleEngine(false);
                 this._postCommand({ type: 'engineResetOff' });
             } else if (wasRunning) {
                 if (!this.muted) {
                     this.resume();
                 }
+                this._disposeActiveSampleEngine(true);
                 this._postCommand({ type: 'engineStop' });
             } else {
                 this.rpm = 0.0;
                 this.load = 0.0;
                 this.turbo = 0.0;
+                this._disposeActiveSampleEngine(false);
                 this._postCommand({ type: 'engineResetOff' });
             }
             this._syncState();
@@ -2284,9 +2877,12 @@ export class W900EngineSound {
     }
 
     setEngineVariant(variantId) {
-        const parsed = Number(variantId);
-        const id = Number.isInteger(parsed) && parsed >= 1 && parsed <= 5 ? parsed : 4;
+        const id = this._normalizeVariant(variantId);
+        const prevId = this.variant;
+        const wasSample = this._isSampleVariant(prevId);
         this.variant = id;
+        const nextSample = this._isSampleVariant(id);
+
         if (this.engineRunning) {
             const minT = this._minTurboForVariant();
             if (this.rpm < IDLE_RPM + 40.0) {
@@ -2298,7 +2894,37 @@ export class W900EngineSound {
         if (!this.muted) {
             this.resume();
         }
-        this._postCommand({ type: 'variant', variant: id });
+
+        if (nextSample) {
+            this._postCommand({ type: 'sampleMode', enabled: true });
+            if (this.engineRunning) {
+                if (wasSample && this._activeSampleEngine && !this._activeSampleEngine.stopping) {
+                    const h = this._activeSampleEngine;
+                    const now = h.ctx.currentTime;
+                    const nextProf = this._sampleProfileForVariant(id);
+                    if (now < h.regularStartCtxTime && h.profileRate > 0) {
+                        const rem = Math.max(0.0, h.regularStartCtxTime - now);
+                        h.regularStartCtxTime = now + rem * (h.profileRate / nextProf.baseRate);
+                    }
+                    h.profileRate = nextProf.baseRate;
+                    this._updateSampleEngineParams();
+                } else {
+                    // Motor já estava ligado em modo procedural: entra direto em regular_engine sem re-tocar a partida
+                    this._startSampleEngine(true);
+                }
+            }
+        } else {
+            if (wasSample) {
+                this._sampleEngineGen += 1;
+                this._disposeActiveSampleEngine(false);
+            }
+            this._postCommand({ type: 'sampleMode', enabled: false });
+            this._postCommand({ type: 'variant', variant: id });
+            if (this.engineRunning && wasSample) {
+                this._postCommand({ type: 'engineResumeRunning' });
+            }
+        }
+
         this._syncState();
         return id;
     }
@@ -2319,22 +2945,30 @@ export class W900EngineSound {
         } else {
             this._postCommand({ type: 'horn', active: false });
         }
+        this._updateSampleEngineParams();
     }
 
     triggerAirBrakeHiss(intensity = 1.0) {
         if (this.muted) return;
+        this.resume();
         this._postCommand({ type: 'airBrake', intensity });
     }
 
     triggerFifthWheelCouple(intensity = 1.0) {
         if (this.muted) return;
         this.resume();
+        if (this.sfxVolume > 0.005) {
+            this._requestSampleDuck(0.48);
+        }
         this._postCommand({ type: 'fifthWheelCouple', intensity });
     }
 
     triggerTrailerHitch(intensity = 1.0) {
         if (this.muted) return;
         this.resume();
+        if (this.sfxVolume > 0.005) {
+            this._requestSampleDuck(0.20);
+        }
         this._postCommand({ type: 'trailerHitch', intensity });
     }
 
@@ -2352,6 +2986,65 @@ export class W900EngineSound {
 
     playSuccessSound() {
         this._playOutcomeStinger('success');
+    }
+
+    _ensureAlertDecoded() {
+        if (this._alertBuffer) return Promise.resolve(this._alertBuffer);
+        if (this._alertLoadPromise) return this._alertLoadPromise;
+        if (!this.audioCtx || typeof fetch !== 'function') return Promise.resolve(null);
+        const ctx = this.audioCtx;
+        this._alertLoadPromise = fetch(ALERT_AUDIO_URL)
+            .then((r) => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.arrayBuffer();
+            })
+            .then((bytes) => ctx.decodeAudioData(bytes))
+            .then((buf) => {
+                this._alertBuffer = buf;
+                this._alertLoadPromise = null;
+                return buf;
+            })
+            .catch(() => {
+                // Falha silenciosa (ex.: protocolo file://): o aviso visual continua funcionando
+                this._alertLoadPromise = null;
+                return null;
+            });
+        return this._alertLoadPromise;
+    }
+
+    /** Toca o som de alerta que acompanha as mensagens de aviso. */
+    playAlertSound() {
+        if (this.muted) return;
+        const nowMs = this._nowMs();
+        if (nowMs - this._lastAlertMs < ALERT_MIN_INTERVAL_MS) return;
+        this._lastAlertMs = nowMs;
+        if (!this.audioCtx) {
+            this.start();
+        }
+        const ctx = this.audioCtx;
+        if (!ctx) return;
+        this.resume();
+
+        this._ensureAlertDecoded().then((buf) => {
+            if (!buf || this.muted) return;
+            const src = ctx.createBufferSource();
+            const gain = ctx.createGain();
+            src.buffer = buf;
+            const level = ALERT_LEVEL * this.sfxVolume;
+            gain.gain.value = level;
+            gain.gain.setValueAtTime(level, ctx.currentTime);
+            src.connect(gain);
+            gain.connect(this._ensureMasterBus() || ctx.destination);
+            src.onended = () => {
+                try {
+                    src.disconnect();
+                    gain.disconnect();
+                } catch (_err) {
+                    // Nó já desconectado
+                }
+            };
+            src.start();
+        });
     }
 
     _stopActiveStinger(fadeSec = 0.018) {
@@ -2402,7 +3095,9 @@ export class W900EngineSound {
             const src = ctx.createBufferSource();
             const gain = ctx.createGain();
             src.buffer = audioBuf;
-            gain.gain.setValueAtTime(0.92, ctx.currentTime);
+            const peakGain = 0.92 * STINGER_LEVEL * (this.muted ? 0.0 : this.sfxVolume);
+            gain.gain.value = peakGain;
+            gain.gain.setValueAtTime(peakGain, ctx.currentTime);
             src.connect(gain);
             const masterOut = this._ensureMasterBus() || ctx.destination;
             gain.connect(masterOut);
@@ -2419,7 +3114,11 @@ export class W900EngineSound {
                     // Nó já desconectado
                 }
             };
-            this._postCommand({ type: 'stingerDuck', duration: Math.min(1.5, audioBuf.duration * 0.65) });
+            if (this.sfxVolume > 0.005) {
+                const stingerDuckSec = Math.min(1.5, audioBuf.duration * 0.65);
+                this._requestSampleDuck(stingerDuckSec);
+                this._postCommand({ type: 'stingerDuck', duration: stingerDuckSec });
+            }
             src.start();
         };
 
@@ -2483,7 +3182,7 @@ export class W900EngineSound {
     }
 
     update(deltaTime, state) {
-        if (!this.started || !this.engineRunning) return;
+        if ((!this.started && !this.audioCtx) || !this.engineRunning) return;
 
         const dt = Math.max(0.001, Math.min(0.1, deltaTime || 1 / 60));
         const speedMs = state.speedMs || 0;
@@ -2499,7 +3198,7 @@ export class W900EngineSound {
 
         this.sinceLastShift += dt;
 
-        // Com freio estacionário puxado e caminhão parado, acelerar sobe o giro livre (ponto morto)
+        // Com freio estacionário puxado e caminhão parado, acelerar sobe o giro livre até o topo (ponto morto)
         if (parkingBrakeOn && speedKmh < 0.8) {
             this.gear = 1;
             this.shiftTimer = 0.0;
@@ -2508,14 +3207,14 @@ export class W900EngineSound {
             let desiredJake = 0.0;
 
             if (absThrottle > 0.05) {
-                desiredRpm = 1880.0;
-                desiredLoad = 0.92;
+                desiredRpm = 2100.0;
+                desiredLoad = 0.94;
             } else if (this.rpm > 850.0) {
                 desiredLoad = 0.05;
                 desiredJake = 0.28;
             }
 
-            const rpmTau = desiredRpm > this.rpm ? 0.36 : 0.42;
+            const rpmTau = desiredRpm > this.rpm ? 0.30 : 0.38;
             this.rpm += (desiredRpm - this.rpm) * (1.0 - Math.exp(-dt / rpmTau));
             this.load += (desiredLoad - this.load) * (1.0 - Math.exp(-dt / 0.08));
             this.jake += (desiredJake - this.jake) * (1.0 - Math.exp(-dt / 0.06));
@@ -2539,38 +3238,40 @@ export class W900EngineSound {
 
         let coupledRpm = IDLE_RPM;
         if (this.gear === -1) {
-            // Ré reduzida (velocidade máxima física de ré = 7.2 km/h -> rotação forte de trabalho)
-            coupledRpm = IDLE_RPM + (speedKmh / 7.4) * (1660.0 - IDLE_RPM);
+            // Ré super-reduzida: atinge rotação cheia já aos ~5.6 km/h (limite físico da ré = 7.2 km/h),
+            // subindo bastante as notas do motor mesmo em manobras lentas de doca
+            const revFrac = Math.min(1.08, Math.pow(speedKmh / 5.6, 0.85));
+            coupledRpm = IDLE_RPM + revFrac * (SHIFT_RPM - IDLE_RPM);
         } else {
             const topKmh = FORWARD_GEAR_TOP_KMH[this.gear - 1];
             coupledRpm = IDLE_RPM + (speedKmh / topKmh) * (SHIFT_RPM - IDLE_RPM);
 
-            // Troca ascendente estilo caixa seca Eaton Fuller
+            // Troca ascendente só depois de esticar bem a marcha até perto do corte (~2.015 RPM)
             if (
                 this.shiftTimer <= 0 &&
                 throttle > 0.1 &&
                 this.gear < FORWARD_GEAR_TOP_KMH.length &&
-                coupledRpm > 1750.0 &&
-                this.sinceLastShift > 0.60
+                coupledRpm > 2015.0 &&
+                this.sinceLastShift > 1.05
             ) {
                 this.gear += 1;
-                this.shiftTimer = 0.24;
+                this.shiftTimer = 0.28;
                 this.sinceLastShift = 0.0;
                 if (!this.muted) {
-                    this._postCommand({ type: 'shiftAir', intensity: 0.65 });
+                    this._postCommand({ type: 'shiftAir', intensity: 0.72 });
                 }
                 const nextTop = FORWARD_GEAR_TOP_KMH[this.gear - 1];
                 coupledRpm = IDLE_RPM + (speedKmh / nextTop) * (SHIFT_RPM - IDLE_RPM);
             } else if (
                 this.shiftTimer <= 0 &&
                 this.gear > 1 &&
-                coupledRpm < 940.0 &&
-                this.sinceLastShift > 0.32
+                coupledRpm < 1020.0 &&
+                this.sinceLastShift > 0.40
             ) {
                 while (this.gear > 1) {
                     const prevTop = FORWARD_GEAR_TOP_KMH[this.gear - 2];
                     const prevRpm = IDLE_RPM + (speedKmh / prevTop) * (SHIFT_RPM - IDLE_RPM);
-                    if (prevRpm < 1580.0) {
+                    if (prevRpm < 1760.0) {
                         this.gear -= 1;
                         coupledRpm = prevRpm;
                         this.sinceLastShift = 0.0;
@@ -2586,21 +3287,24 @@ export class W900EngineSound {
         let desiredJake = 0.0;
 
         if (this.shiftTimer > 0) {
-            // Corte de injeção na troca de marcha: estalo de escape direto + suspiro da turbina
+            // Corte de injeção na troca de marcha: queda nítida de nota + suspiro da turbina
             this.shiftTimer = Math.max(0.0, this.shiftTimer - dt);
             desiredLoad = 0.04;
             desiredJake = 0.24;
         } else if (absThrottle > 0.05) {
-            const clutchBiteRpm = IDLE_RPM + absThrottle * (hasTrailer ? 430.0 : 350.0);
+            const biteSpan = this.gear === -1
+                ? (hasTrailer ? 640.0 : 540.0)
+                : (hasTrailer ? 560.0 : 460.0);
+            const clutchBiteRpm = IDLE_RPM + absThrottle * biteSpan;
             desiredRpm = Math.max(desiredRpm, clutchBiteRpm);
             const trailerLoadBonus = hasTrailer ? 0.14 : 0.0;
-            const lugBonus = desiredRpm < 1300.0 ? 0.16 : 0.06;
+            const lugBonus = desiredRpm < 1350.0 ? 0.16 : 0.06;
             desiredLoad = Math.min(1.0, 0.42 + 0.46 * absThrottle + trailerLoadBonus + lugBonus);
         } else if (speedKmh > 2.5) {
             desiredLoad = 0.05;
             if (brake > 0.1 && coupledRpm > 920.0) {
                 // Freio-motor Jacobs (Jake Brake) estralado nas reduções fortes
-                desiredJake = Math.min(0.92, 0.35 + 0.65 * ((coupledRpm - 900.0) / 850.0));
+                desiredJake = Math.min(0.92, 0.35 + 0.65 * ((coupledRpm - 900.0) / 950.0));
             } else if (coupledRpm > 980.0) {
                 // Embalo / corte em escape direto
                 desiredJake = 0.26;

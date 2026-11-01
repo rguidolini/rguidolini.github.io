@@ -230,9 +230,16 @@ export class LevelManager {
         if (this.ui.topInfoPanel) {
             this.ui.topInfoPanel.style.display = '';
         }
-        this.ui.infoTitle.innerText = "Level " + this.currentLevel + ": " + infoTitle;
-        this.ui.infoDescription.innerText = infoDescription;
-        this.ui.attemptCounter.innerText = "Attempt: " + this.attempt;
+        const fullTitle = "Level " + this.currentLevel + ": " + infoTitle;
+        this.ui.infoTitle.textContent = fullTitle;
+        this.ui.infoDescription.textContent = infoDescription;
+        if (this.ui.helpLevelTitle) {
+            this.ui.helpLevelTitle.textContent = fullTitle;
+        }
+        if (this.ui.helpLevelDescription) {
+            this.ui.helpLevelDescription.textContent = infoDescription;
+        }
+        this.ui.attemptCounter.textContent = "Attempt: " + this.attempt;
     }
 
     passedLevel(reason) {

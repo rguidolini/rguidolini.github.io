@@ -79,9 +79,10 @@
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.24);
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
-      width: min(310px, 88vw);
+      width: min(340px, 88vw);
       max-height: calc(100dvh - 28px);
       overflow-y: auto;
+      touch-action: pan-y;
       z-index: 45;
       display: none;
     }
@@ -197,6 +198,7 @@
       min-width: 150px;
       text-align: center;
     }
+
 
     /* Pilha invertida de notificações no canto superior esquerdo (cresce de cima para baixo) */
     #notification-stack {
@@ -460,6 +462,7 @@
 
     /* Controles de toque na borda inferior (visíveis apenas quando MobileControls ativa isMobile) */
     #mobile-controls-root {
+      --mob-steer-h: 68px;
       position: fixed;
       inset: 0;
       pointer-events: none;
@@ -483,14 +486,13 @@
     #mobile-action-bar {
       display: flex;
       align-items: center;
-      gap: 5px;
-      padding: 4px 6px;
-      background: rgba(12, 16, 22, 0.72);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      border: 1px solid rgba(255, 255, 255, 0.22);
+      justify-content: space-between;
+      gap: 13px;
+      padding: 4px 10px;
+      background: rgba(12, 16, 22, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 999px;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      box-shadow: none;
     }
 
     .mob-action-btn {
@@ -726,7 +728,7 @@
       display: flex;
       align-items: flex-end;
       gap: 8px;
-      pointer-events: auto;
+      pointer-events: none;
     }
 
     #mobile-pedal-pad {
@@ -737,7 +739,7 @@
       display: flex;
       align-items: flex-end;
       gap: 8px;
-      pointer-events: auto;
+      pointer-events: none;
     }
 
     .mob-drive-btn {
@@ -746,33 +748,45 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      pointer-events: none;
-      background: rgba(17, 24, 39, 0.68);
-      backdrop-filter: blur(5px);
-      -webkit-backdrop-filter: blur(5px);
-      color: #ffffff;
-      border: 2px solid rgba(255, 255, 255, 0.34);
+      pointer-events: auto;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      background: rgba(15, 23, 42, 0.16);
+      color: rgba(255, 255, 255, 0.62);
+      border: 1.5px solid rgba(255, 255, 255, 0.22);
       border-radius: 18px;
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
-      transition: transform 0.06s ease, background-color 0.08s ease, border-color 0.08s ease;
+      box-shadow: none;
+      transition: transform 0.06s ease, background-color 0.08s ease, border-color 0.08s ease, color 0.08s ease;
+    }
+
+    .mob-drive-btn > * {
+      pointer-events: none;
     }
 
     .mob-steer-btn {
-      height: 68px;
+      height: var(--mob-steer-h);
       font-size: 1.7rem;
       font-weight: 700;
     }
 
+    .mob-steer-left-btn,
+    .mob-gas-btn {
+      margin-bottom: calc(var(--mob-steer-h) * 0.5);
+    }
+
     .mob-brake-btn {
       height: 66px;
-      background: rgba(127, 29, 29, 0.68);
-      border-color: rgba(252, 165, 165, 0.45);
+      background: rgba(210, 52, 52, 0.20);
+      border-color: rgba(252, 165, 165, 0.28);
+      color: rgba(255, 245, 245, 0.66);
     }
 
     .mob-gas-btn {
       height: 80px;
-      background: rgba(20, 83, 45, 0.68);
-      border-color: rgba(134, 239, 172, 0.45);
+      background: rgba(34, 175, 84, 0.20);
+      border-color: rgba(134, 239, 172, 0.28);
+      color: rgba(245, 255, 248, 0.68);
     }
 
     .mob-pedal-arrow {
@@ -785,16 +799,16 @@
       font-size: 0.66rem;
       letter-spacing: 0.05em;
       font-weight: 700;
-      opacity: 0.92;
+      opacity: 0.85;
       margin-top: 3px;
     }
 
     .mob-drive-btn.is-pressed {
       transform: scale(0.93);
-      background: rgba(255, 214, 0, 0.88);
-      color: #111827;
-      border-color: #ffffff;
-      box-shadow: 0 2px 10px rgba(255, 214, 0, 0.5);
+      background: rgba(255, 214, 0, 0.42);
+      color: rgba(17, 24, 39, 0.9);
+      border-color: rgba(255, 255, 255, 0.58);
+      box-shadow: none;
     }
 
     /* Ajuste fino para celular na horizontal (landscape de altura reduzida) */
@@ -803,8 +817,8 @@
         padding: 4px 24px 4px 10px;
       }
 
-      body.is-mobile .mob-steer-btn {
-        height: 60px;
+      body.is-mobile #mobile-controls-root {
+        --mob-steer-h: 60px;
       }
 
       body.is-mobile .mob-brake-btn {
@@ -825,8 +839,8 @@
       }
 
       #mobile-action-bar {
-        gap: 3px;
-        padding: 4px 5px;
+        gap: 9.5px;
+        padding: 4px 7px;
       }
 
       .mob-action-btn {
@@ -863,6 +877,11 @@
       #mobile-pedal-pad {
         width: 104px;
         gap: 5px;
+      }
+
+      #mobile-action-bar {
+        gap: 9px;
+        padding: 4px 6px;
       }
 
       .mob-action-btn {
@@ -1001,8 +1020,13 @@
     <div id="game-controls-info">
       <span id="close-info-button" title="Close">X</span>
       <div class="text-left text-sm">
-        <h1 class="text-xl font-bold mb-1">Controls</h1>
+        <div id="help-level-section" class="pr-7 mb-2">
+          <p class="text-xs font-bold uppercase tracking-wider" style="color: #ffd600;">Current Objective</p>
+          <h2 id="help-level-title" class="text-base font-bold text-white leading-tight mt-0.5">Level title goes here</h2>
+          <p id="help-level-description" class="text-xs text-gray-300 leading-snug mt-1">Level description goes here</p>
+        </div>
         <hr class="border-gray-600 my-2" />
+        <h1 class="text-lg font-bold mb-1.5">Controls</h1>
         <div id="desktop-help-list">
           <p><span class="font-bold">E:</span> Start / stop engine</p>
           <p><span class="font-bold">Arrows:</span> Move the truck</p>
@@ -1476,6 +1500,8 @@
         topInfoPanel: document.getElementById('top-info-panel'),
         infoTitle: document.getElementById('info-title'),
         infoDescription: document.getElementById('info-description'),
+        helpLevelTitle: document.getElementById('help-level-title'),
+        helpLevelDescription: document.getElementById('help-level-description'),
         attemptCounter: document.getElementById('attempt-counter'),
         msgBox: document.getElementById('message-box'),
         msgText: document.getElementById('message-text'),
@@ -1554,6 +1580,13 @@
       document.addEventListener("wheel", (e) => {
         camera.MouseWheel(e);
       });
+      const controlsInfoEl = document.getElementById("game-controls-info");
+      controlsInfoEl.addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+      });
+      controlsInfoEl.addEventListener("wheel", (e) => {
+        e.stopPropagation();
+      }, { passive: true });
       document.getElementById("close-info-button").addEventListener("mousedown", (e) => {
         e.stopPropagation();
       });

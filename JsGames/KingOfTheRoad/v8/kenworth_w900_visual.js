@@ -3816,7 +3816,7 @@ function mountStructureVisibilityUI({
     bakedRearTaillights,
     rebuildHeadlights,
     rebuildNucleo,
-    initialEngineVariant = 4,
+    initialEngineVariant = 6,
     onSelectEngineVariant = null
 }) {
     if (typeof document === 'undefined') return null;
@@ -3899,7 +3899,7 @@ function mountStructureVisibilityUI({
         panel.addEventListener(evt, e => e.stopPropagation());
     });
 
-    // Seletor das 5 variantes de som do motor (padrão = #4: Grave + rouco)
+    // Seletor das 6 variantes de som do motor (padrão = Scania)
     const soundSection = document.createElement('div');
     Object.assign(soundSection.style, {
         display: 'flex',
@@ -3926,16 +3926,18 @@ function mountStructureVisibilityUI({
     });
 
     const engineOptions = [
+        { id: 6, label: 'Scania' },
+        { id: 7, label: 'Scania Grave' },
         { id: 1, label: '1: Cat 3406B' },
         { id: 2, label: '2: Mais rouco' },
-        { id: 3, label: '3: Mais grave' },
         { id: 4, label: '4: Grave + rouco' },
         { id: 5, label: '5: Vídeo (N14)' }
     ];
+    const validEngineIds = new Set(engineOptions.map(opt => opt.id));
     const soundButtons = new Map();
-    let activeEngineId = Number.isInteger(initialEngineVariant) && initialEngineVariant >= 1 && initialEngineVariant <= 5
+    let activeEngineId = validEngineIds.has(initialEngineVariant)
         ? initialEngineVariant
-        : 4;
+        : 6;
 
     const refreshSoundButtons = () => {
         soundButtons.forEach((btn, id) => {
@@ -3965,10 +3967,6 @@ function mountStructureVisibilityUI({
             textOverflow: 'ellipsis',
             transition: 'background-color 0.12s ease, color 0.12s ease'
         });
-        if (opt.id === 5) {
-            btn.style.gridColumn = 'span 2';
-            btn.style.textAlign = 'center';
-        }
 
         let lastTouchTs = 0;
         const onPickSound = (e) => {
@@ -3982,7 +3980,7 @@ function mountStructureVisibilityUI({
             let chosen = opt.id;
             if (typeof onSelectEngineVariant === 'function') {
                 const res = onSelectEngineVariant(opt.id);
-                if (Number.isInteger(res) && res >= 1 && res <= 5) {
+                if (validEngineIds.has(res)) {
                     chosen = res;
                 }
             }
@@ -4473,7 +4471,7 @@ function mountStructureVisibilityUI({
 
     return {
         setActiveEngineVariant(id) {
-            if (Number.isInteger(id) && id >= 1 && id <= 5) {
+            if (validEngineIds.has(id)) {
                 activeEngineId = id;
                 refreshSoundButtons();
             }
