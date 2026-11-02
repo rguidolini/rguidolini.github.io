@@ -352,13 +352,23 @@ export class KenworthW900 {
     }
 
     setSfxVolume(volume) {
-        if (!this.engineSound) return 0.45;
+        if (!this.engineSound) return 1.0;
         return this.engineSound.setSfxVolume(volume);
     }
 
     getSfxVolume() {
-        if (!this.engineSound) return 0.45;
+        if (!this.engineSound) return 1.0;
         return this.engineSound.getSfxVolume();
+    }
+
+    setSfxLevel(kind, level) {
+        if (!this.engineSound) return null;
+        return this.engineSound.setSfxLevel(kind, level);
+    }
+
+    getSfxLevel(kind) {
+        if (!this.engineSound) return null;
+        return this.engineSound.getSfxLevel(kind);
     }
 
     Brake(breakFraction) {

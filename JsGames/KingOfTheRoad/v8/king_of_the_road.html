@@ -463,6 +463,9 @@
     /* Controles de toque na borda inferior (visíveis apenas quando MobileControls ativa isMobile) */
     #mobile-controls-root {
       --mob-steer-h: 68px;
+      /* Barra de ações com a mesma altura dos botões de direção; botões internos escalam com ela */
+      --mob-btn: calc(var(--mob-steer-h) * 0.62);
+      --mob-bar-gap: 11px;
       position: fixed;
       inset: 0;
       pointer-events: none;
@@ -472,6 +475,7 @@
     #mobile-action-wrap {
       position: absolute;
       top: auto;
+      /* Mesma altura e mesma posição vertical do botão de curvar para a direita */
       bottom: calc(12px + env(safe-area-inset-bottom, 0px));
       left: 50%;
       transform: translateX(-50%);
@@ -484,11 +488,13 @@
     }
 
     #mobile-action-bar {
+      box-sizing: border-box;
+      height: var(--mob-steer-h);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 13px;
-      padding: 4px 10px;
+      gap: var(--mob-bar-gap);
+      padding: 0 calc(var(--mob-steer-h) * 0.2);
       background: rgba(12, 16, 22, 0.16);
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 999px;
@@ -496,12 +502,19 @@
     }
 
     .mob-action-btn {
+      box-sizing: border-box;
+      width: var(--mob-btn);
+      height: var(--mob-btn);
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       background: rgba(255, 255, 255, 0.1);
       color: #f3f4f6;
       border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 0.75rem;
+      border-radius: 50%;
+      padding: 0;
+      font-size: calc(var(--mob-btn) * 0.42);
       font-weight: 700;
       line-height: 1;
       white-space: nowrap;
@@ -537,157 +550,139 @@
       color: #0f172a;
     }
 
-    /* Botões circulares automotivos START/STOP, Freio de Estacionamento (P) e Engate da Carreta no mobile (sem backlight externa) */
-    .mob-action-btn.mob-engine-start-btn,
-    .mob-action-btn.mob-park-brake-btn,
-    .mob-action-btn.mob-hitch-btn {
-      width: 32px;
-      height: 32px;
-      padding: 0;
-      border-radius: 50%;
-      border: none;
-      background: transparent;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
-      transition: transform 0.08s ease;
+    /* START/STOP, Freio de mão e Carreta no mesmo estilo dos demais: contorno branco + fundo transparente.
+       O estado ativo é indicado apenas pela cor do ícone interno (LEDs no START/STOP). */
+    .mob-engine-svg,
+    .mob-park-svg {
+      width: calc(var(--mob-btn) * 0.82);
+      height: calc(var(--mob-btn) * 0.82);
+      display: block;
     }
 
-    .mob-engine-svg,
-    .mob-park-svg,
     .mob-hitch-svg {
-      width: 100%;
-      height: 100%;
+      width: calc(var(--mob-btn) * 0.8);
+      height: calc(var(--mob-btn) * 0.32);
       display: block;
     }
 
     .mob-eng-led {
       fill: #ff2a2a;
-      stroke: #1a0606;
+      stroke: rgba(0, 0, 0, 0.45);
       stroke-width: 1;
-      transition: fill 0.16s ease, stroke 0.16s ease;
+      transition: fill 0.16s ease;
     }
 
     .mob-eng-led-glow {
       fill: #ef4444;
-      opacity: 0.24;
-      transition: fill 0.16s ease, opacity 0.16s ease;
+      opacity: 0.28;
+      transition: fill 0.16s ease;
     }
 
     .mob-engine-start-btn.is-engine-on .mob-eng-led {
       fill: #18e85b;
-      stroke: #061a0c;
     }
 
     .mob-engine-start-btn.is-engine-on .mob-eng-led-glow {
       fill: #22c55e;
-      opacity: 0.26;
     }
 
-    .mob-park-stroke {
-      stroke: #3c434f;
-      transition: stroke 0.16s ease;
+    .mob-action-btn.mob-park-brake-btn,
+    .mob-action-btn.mob-hitch-btn,
+    .mob-action-btn.mob-engine-start-btn {
+      transition: color 0.16s ease, border-color 0.16s ease;
     }
 
-    .mob-park-fill {
-      fill: #3c434f;
-      transition: fill 0.16s ease;
+    .mob-action-btn.mob-park-brake-btn.is-park-on {
+      color: #ff3b3b;
     }
 
-    .mob-park-glow {
-      opacity: 0;
-      transition: opacity 0.16s ease;
+    .mob-action-btn.mob-hitch-btn.is-hitch-on {
+      color: #4ade80;
     }
 
-    .mob-park-brake-btn.is-park-on .mob-park-stroke {
-      stroke: #ff2222;
-    }
-
-    .mob-park-brake-btn.is-park-on .mob-park-fill {
-      fill: #ff2222;
-    }
-
-    .mob-park-brake-btn.is-park-on .mob-park-glow {
-      opacity: 0.26;
-    }
-
-    .mob-hitch-cap-on,
-    .mob-hitch-ring-on,
     .mob-hitch-arrow-on {
-      opacity: 0;
-      transition: opacity 0.16s ease;
+      display: none;
     }
 
-    .mob-hitch-arrow-off {
-      opacity: 1;
-      transition: opacity 0.16s ease;
-    }
-
-    .mob-hitch-fill {
-      fill: #b4bcc8;
-      transition: fill 0.16s ease;
-    }
-
-    .mob-hitch-stroke {
-      stroke: #b4bcc8;
-      transition: stroke 0.16s ease;
-    }
-
-    .mob-hitch-btn.is-hitch-on .mob-hitch-cap-on,
-    .mob-hitch-btn.is-hitch-on .mob-hitch-ring-on,
     .mob-hitch-btn.is-hitch-on .mob-hitch-arrow-on {
-      opacity: 1;
+      display: inline;
     }
 
     .mob-hitch-btn.is-hitch-on .mob-hitch-arrow-off {
-      opacity: 0;
-    }
-
-    .mob-hitch-btn.is-hitch-on .mob-hitch-fill {
-      fill: #6bff9b;
-    }
-
-    .mob-hitch-btn.is-hitch-on .mob-hitch-stroke {
-      stroke: #6bff9b;
+      display: none;
     }
 
     .mob-action-btn.mob-cam-icon-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 6px 9px;
       color: #f3f4f6;
     }
 
     .mob-action-btn.mob-horn-icon-btn {
-      width: 32px;
-      height: 32px;
-      padding: 0;
-      border-radius: 50%;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
       color: #f3f4f6;
     }
 
+    /* Buzina acionada: só o ícone fica amarelo (contorno e fundo permanecem iguais) */
     .mob-action-btn.mob-horn-icon-btn.is-warn-active {
-      color: #111827;
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #ffd600;
       box-shadow: none;
     }
 
     .mob-cam-svg {
-      width: 16px;
-      height: 16px;
+      width: calc(var(--mob-btn) * 0.5);
+      height: calc(var(--mob-btn) * 0.5);
       display: block;
     }
 
     .mob-horn-svg {
-      width: 19px;
-      height: 13px;
+      width: calc(var(--mob-btn) * 0.6);
+      height: calc(var(--mob-btn) * 0.41);
       display: block;
+    }
+
+    .mob-action-btn.mob-light-icon-btn,
+    .mob-action-btn.mob-sound-icon-btn {
+      color: #f3f4f6;
+    }
+
+    .mob-action-btn.mob-light-icon-btn.is-lights-on {
+      color: #ffd600;
+    }
+
+    .mob-light-icon-btn .mob-light-high {
+      display: none;
+    }
+
+    .mob-light-icon-btn.is-high-beam .mob-light-high {
+      display: block;
+    }
+
+    .mob-light-icon-btn.is-high-beam .mob-light-low {
+      display: none;
+    }
+
+    .mob-light-svg {
+      width: calc(var(--mob-btn) * 0.6);
+      height: calc(var(--mob-btn) * 0.41);
+      display: block;
+    }
+
+    .mob-sound-svg {
+      width: calc(var(--mob-btn) * 0.5);
+      height: calc(var(--mob-btn) * 0.5);
+      display: block;
+    }
+
+    .mob-sound-x {
+      display: none;
+    }
+
+    .mob-sound-icon-btn.is-muted .mob-sound-waves {
+      display: none;
+    }
+
+    .mob-sound-icon-btn.is-muted .mob-sound-x {
+      display: inline;
     }
 
     #mobile-cam-drawer {
@@ -838,37 +833,9 @@
         gap: 6px;
       }
 
-      #mobile-action-bar {
-        gap: 9.5px;
-        padding: 4px 7px;
-      }
-
-      .mob-action-btn {
-        padding: 5px 6px;
-        font-size: 0.66rem;
-      }
-
-      .mob-action-btn.mob-engine-start-btn,
-      .mob-action-btn.mob-park-brake-btn,
-      .mob-action-btn.mob-hitch-btn,
-      .mob-action-btn.mob-horn-icon-btn {
-        width: 27px;
-        height: 27px;
-        padding: 0;
-      }
-
-      .mob-action-btn.mob-cam-icon-btn {
-        padding: 5px 7px;
-      }
-
-      .mob-cam-svg {
-        width: 14px;
-        height: 14px;
-      }
-
-      .mob-horn-svg {
-        width: 16px;
-        height: 11px;
+      #mobile-controls-root {
+        --mob-btn: calc(var(--mob-steer-h) * 0.56);
+        --mob-bar-gap: 7px;
       }
     }
 
@@ -879,37 +846,9 @@
         gap: 5px;
       }
 
-      #mobile-action-bar {
-        gap: 9px;
-        padding: 4px 6px;
-      }
-
-      .mob-action-btn {
-        padding: 4px 5px;
-        font-size: 0.62rem;
-      }
-
-      .mob-action-btn.mob-engine-start-btn,
-      .mob-action-btn.mob-park-brake-btn,
-      .mob-action-btn.mob-hitch-btn,
-      .mob-action-btn.mob-horn-icon-btn {
-        width: 24px;
-        height: 24px;
-        padding: 0;
-      }
-
-      .mob-action-btn.mob-cam-icon-btn {
-        padding: 4px 6px;
-      }
-
-      .mob-cam-svg {
-        width: 13px;
-        height: 13px;
-      }
-
-      .mob-horn-svg {
-        width: 14px;
-        height: 10px;
+      #mobile-controls-root {
+        --mob-btn: calc(var(--mob-steer-h) * 0.5);
+        --mob-bar-gap: 5px;
       }
     }
   </style>
@@ -1620,6 +1559,7 @@
         if (mobileControls) mobileControls.syncHUD();
       });
     }
+
 
 
     /**

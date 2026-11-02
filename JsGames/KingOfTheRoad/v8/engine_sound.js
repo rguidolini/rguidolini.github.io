@@ -11,13 +11,15 @@
 export const ENGINE_STARTUP_DURATION = 1.21;
 export const DEFAULT_ENGINE_VARIANT = 6;
 export const VALID_ENGINE_VARIANTS = [6, 7, 1, 2, 4, 5];
-// Nível geral dos sons que não são de motor (1.0 = volume original). Buzina e stingers usam 60% disso; Foley usa 90%.
-export const DEFAULT_SFX_VOLUME = 0.45;
-const STINGER_LEVEL = 0.60;
-// Som de alerta (acompanha as notificações de aviso), no mesmo nível relativo da buzina e dos stingers
+// Nível geral dos sons que não são de motor (1.0 = volume original)
+export const DEFAULT_SFX_VOLUME = 1.0;
+// Volumes individuais de cada efeito (1.0 = volume original/padrão)
+export const SFX_KINDS = ['horn', 'air', 'hitch', 'fifthWheel', 'success', 'fail', 'alert'];
+// Som de alerta (acompanha as notificações de aviso)
 const ALERT_AUDIO_URL = new URL('./audio/alert.mp3', import.meta.url).href;
-const ALERT_LEVEL = 0.60;
 const ALERT_MIN_INTERVAL_MS = 600;
+// Som de falha de fase (arquivo customizado); se não carregar, usa o stinger procedural antigo
+const FAIL_AUDIO_URL = new URL('./audio/fail.mp3', import.meta.url).href;
 
 const PROCEDURAL_STARTUP_DURATION = 2.32;
 const SCANIA_GRAVE_BASE_RATE = 0.78;
@@ -671,14 +673,21 @@ function createW900DspCore(sampleRate) {
     let curTurbo = 0.06;
     let curJake = 0.0;
     let curMasterGain = 0.0;
-    let curHornGain = 0.45;
+    let curHornGain = 1.0;
 
     let targetRpm = 595.0;
     let targetLoad = 0.18;
     let targetTurbo = 0.06;
     let targetJake = 0.0;
     let targetMasterGain = 1.0;
-    let targetHornGain = 0.45;
+    let targetHornGain = 1.0;
+
+    // Volumes individuais dos efeitos (1.0 = volume original)
+    let hornVol = 1.0;
+    let airVol = 1.0;
+    let slamVol = 1.0;
+    let hitchVol = 1.0;
+    let foleyDuckScale = 1.0;
 
     // Estado da buzina a ar Columbia dupla de ferro fundido (corneta longa 315.5 Hz + corneta curta 377.0 Hz)
     let hornGate = false;
@@ -768,6 +777,10 @@ function createW900DspCore(sampleRate) {
         if (params.jake !== undefined) targetJake = params.jake;
         if (params.masterGain !== undefined) targetMasterGain = params.masterGain;
         if (params.hornGain !== undefined) targetHornGain = params.hornGain;
+        if (params.hornVol !== undefined) hornVol = params.hornVol;
+        if (params.airVol !== undefined) airVol = params.airVol;
+        if (params.slamVol !== undefined) slamVol = params.slamVol;
+        if (params.hitchVol !== undefined) hitchVol = params.hitchVol;
     };
 
     const setHorn = (active) => {
@@ -813,11 +826,13 @@ function createW900DspCore(sampleRate) {
         slamKeeperHammer.rem = 0;
         slamActive = true;
         foleyDuckHold = Math.max(foleyDuckHold, 0.48);
+        foleyDuckScale = slamVol;
     };
 
-    const triggerStingerDuck = (duration = 0.70) => {
+    const triggerStingerDuck = (duration = 0.70, scale = 1.0) => {
         const d = Math.max(0.1, Math.min(2.0, Number(duration) || 0.70));
         foleyDuckHold = Math.max(foleyDuckHold, d);
+        foleyDuckScale = Math.max(0.0, Math.min(1.0, Number(scale)));
     };
 
     const triggerTrailerHitch = (intensity = 1.0) => {
@@ -834,6 +849,7 @@ function createW900DspCore(sampleRate) {
         hitchLatchHammer.rem = 0;
         hitchActive = true;
         foleyDuckHold = Math.max(foleyDuckHold, 0.14);
+        foleyDuckScale = hitchVol;
     };
 
     const triggerTrailerLock = () => {
@@ -1385,7 +1401,9 @@ function createW900DspCore(sampleRate) {
             if (airBrakeEnv > 0.0005 || shiftAirEnv > 0.0005) {
                 airBrakeEnv *= airBrakeDecay;
                 shiftAirEnv *= shiftAirDecay;
-                const env = airBrakeEnv + shiftAirEnv;
+                // Descarga do freio de mão: +20% e depois mais +25% (1.2 x 1.25 = 1.5x o original);
+                // o sopro da troca de marcha permanece igual
+                const env = airBrakeEnv * 1.5 + shiftAirEnv;
                 pneu = env * (0.34 * stepBiquad(airBrakeBp1, wn1) + 0.22 * stepBiquad(airBrakeBp2, wn2));
             } else {
                 airBrakeEnv = 0.0;
@@ -1519,10 +1537,12 @@ function createW900DspCore(sampleRate) {
 
                 const warmTimber = stepBiquad(slamWoodLp, flatWoodSlap + panelBody);
                 const slamCore = gustSig + roomAirShock + wallThud + warmTimber;
-                foleyDryL += slamCore * 1.03 * slamStrength;
-                foleyDryR += slamCore * 0.97 * slamStrength;
+                // 5ª roda: trim de 0.76 na entrada do barramento Foley (que satura) = ~85% do volume percebido anterior
+                const SLAM_TRIM = 0.76;
+                foleyDryL += slamCore * 1.03 * slamStrength * slamVol * SLAM_TRIM;
+                foleyDryR += slamCore * 0.97 * slamStrength * slamVol * SLAM_TRIM;
 
-                const hallIn = (warmTimber * 0.94 + wallThud * 0.30) * slamStrength;
+                const hallIn = (warmTimber * 0.94 + wallThud * 0.30) * slamStrength * slamVol * SLAM_TRIM;
                 const hallHp = hallIn - slamHallHpIn + slamHallHpPole * slamHallHpOut;
                 slamHallHpIn = hallIn;
                 slamHallHpOut = hallHp;
@@ -1663,8 +1683,8 @@ function createW900DspCore(sampleRate) {
 
                 const hitchWoodCore = airRush + airPistonThump + woodSlapBurst + wBody;
                 const hitchLatchCore = latchClickBurst + lSnap;
-                foleyDryL += (hitchWoodCore * 1.04 + hitchLatchCore * 0.94) * hitchStrength;
-                foleyDryR += (hitchWoodCore * 0.96 + hitchLatchCore * 1.06) * hitchStrength;
+                foleyDryL += (hitchWoodCore * 1.04 + hitchLatchCore * 0.94) * hitchStrength * hitchVol;
+                foleyDryR += (hitchWoodCore * 0.96 + hitchLatchCore * 1.06) * hitchStrength * hitchVol;
 
                 if (hitchClock >= 0.28) {
                     hitchActive = false;
@@ -1819,14 +1839,13 @@ function createW900DspCore(sampleRate) {
                 hornEchoEnergy = 0.0;
             }
 
-            const engineDuck = (1.0 - 0.22 * hornEnv1 * curHornGain) *
-                (1.0 - 0.65 * Math.min(1.0, foleyDuckEnv) * curHornGain);
+            const engineDuck = (1.0 - 0.22 * hornEnv1 * curHornGain * hornVol) *
+                (1.0 - 0.65 * Math.min(1.0, foleyDuckEnv) * curHornGain * foleyDuckScale);
             const engGain = curMasterGain * engineEnv * engineDuck;
             const engCoreL = (stL * 0.37 + stR * 0.10 + subL + mech * prof.clatMul + turboSig * prof.turboMul) * prof.outTrim + starterAuxL;
             const engCoreR = (stR * 0.37 + stL * 0.10 + subR + mech * prof.clatMul + turboSig * prof.turboMul) * prof.outTrim + starterAuxR;
-            const pneuGain = curHornGain * engineDuck;
-            // Buzina calibrada em 60% do nível geral de efeitos
-            const hornLevel = curHornGain * 0.60;
+            const pneuGain = curHornGain * airVol * engineDuck;
+            const hornLevel = curHornGain * hornVol;
             const rawL = engCoreL * engGain + pneu * pneuGain + (hornOutL + yardEchoL) * hornLevel;
             const rawR = engCoreR * engGain + pneu * pneuGain + (hornOutR + yardEchoR) * hornLevel;
 
@@ -1841,10 +1860,9 @@ function createW900DspCore(sampleRate) {
             postLpL += (hpL - postLpL) * postLpA;
             postLpR += (hpR - postLpR) * postLpA;
 
-            // Foley (5ª roda e engate/desengate) calibrado em 90% do nível geral de efeitos
-            const foleyLevel = curHornGain * 0.90;
-            outL[i] = fastTanh(postLpL * 0.92 + foleyLpL * foleyLevel) * 0.88;
-            outR[i] = fastTanh(postLpR * 0.92 + foleyLpR * foleyLevel) * 0.88;
+            // Volumes individuais da 5ª roda e do engate já aplicados na entrada do barramento Foley
+            outL[i] = fastTanh(postLpL * 0.92 + foleyLpL * curHornGain) * 0.88;
+            outR[i] = fastTanh(postLpR * 0.92 + foleyLpR * curHornGain) * 0.88;
         }
     };
 
@@ -2212,6 +2230,8 @@ export class W900EngineSound {
         this.muted = false;
         this.frozen = false;
         this.sfxVolume = DEFAULT_SFX_VOLUME;
+        this.sfxLevels = Object.fromEntries(SFX_KINDS.map((k) => [k, 1.0]));
+        this._duckScale = 1.0;
         this.hornActive = false;
         this._hornInputHeld = false;
         this.engineRunning = false;
@@ -2223,6 +2243,8 @@ export class W900EngineSound {
         this._stingerReqId = 0;
         this._alertBuffer = null;
         this._alertLoadPromise = null;
+        this._failBuffer = null;
+        this._failLoadPromise = null;
         this._lastAlertMs = -Infinity;
 
         this._sampleEngineData = null;
@@ -2314,7 +2336,8 @@ export class W900EngineSound {
             : Date.now();
     }
 
-    _requestSampleDuck(durationSec) {
+    _requestSampleDuck(durationSec, scale = 1.0) {
+        this._duckScale = Math.max(0.0, Math.min(1.0, Number(scale)));
         const dMs = Math.max(80, Math.min(2000, (Number(durationSec) || 0.4) * 1000.0));
         this._duckUntilMs = Math.max(this._duckUntilMs, this._nowMs() + dMs);
         this._updateSampleEngineParams();
@@ -2504,10 +2527,10 @@ export class W900EngineSound {
         const sfxScale = this.muted ? 0.0 : this.sfxVolume;
         let duck = 1.0;
         if (this._nowMs() < this._duckUntilMs) {
-            duck *= 1.0 - 0.48 * sfxScale;
+            duck *= 1.0 - 0.48 * sfxScale * this._duckScale;
         }
         if (this.hornActive) {
-            duck *= 1.0 - 0.18 * sfxScale;
+            duck *= 1.0 - 0.18 * sfxScale * this.sfxLevels.horn;
         }
         const freezeScalar = this.frozen ? 0.28 : 1.0;
 
@@ -2568,6 +2591,7 @@ export class W900EngineSound {
             this._ensureMasterBus();
             this._ensureSampleEngineDecoded();
             this._ensureAlertDecoded();
+            this._ensureFailDecoded();
             this._setupAudioGraph();
         }
     }
@@ -2627,7 +2651,7 @@ export class W900EngineSound {
                                 } else if (msg.type === 'fifthWheelCouple') {
                                     this.core.triggerFifthWheelCouple(msg.intensity);
                                 } else if (msg.type === 'stingerDuck') {
-                                    this.core.triggerStingerDuck(msg.duration);
+                                    this.core.triggerStingerDuck(msg.duration, msg.scale);
                                 } else if (msg.type === 'trailerHitch') {
                                     this.core.triggerTrailerHitch(msg.intensity);
                                 } else if (msg.type === 'trailerLock') {
@@ -2750,7 +2774,7 @@ export class W900EngineSound {
             } else if (msg.type === 'fifthWheelCouple') {
                 this.dspCore.triggerFifthWheelCouple(msg.intensity);
             } else if (msg.type === 'stingerDuck') {
-                this.dspCore.triggerStingerDuck(msg.duration);
+                this.dspCore.triggerStingerDuck(msg.duration, msg.scale);
             } else if (msg.type === 'trailerHitch') {
                 this.dspCore.triggerTrailerHitch(msg.intensity);
             } else if (msg.type === 'trailerLock') {
@@ -2787,7 +2811,11 @@ export class W900EngineSound {
             turbo: this.turbo,
             jake: this.jake,
             masterGain: this._computeMasterGain(),
-            hornGain: this.muted ? 0.0 : this.sfxVolume
+            hornGain: this.muted ? 0.0 : this.sfxVolume,
+            hornVol: this.sfxLevels.horn,
+            airVol: this.sfxLevels.air,
+            slamVol: this.sfxLevels.fifthWheel,
+            hitchVol: this.sfxLevels.hitch
         });
         this._updateSampleEngineParams();
     }
@@ -2801,7 +2829,8 @@ export class W900EngineSound {
         if (this._activeStinger && this._activeStinger.gain && this._activeStinger.ctx) {
             try {
                 const now = this._activeStinger.ctx.currentTime;
-                const nextGain = 0.92 * STINGER_LEVEL * (this.muted ? 0.0 : clamped);
+                const kindLevel = this.sfxLevels[this._activeStinger.kind] ?? 1.0;
+                const nextGain = (this._activeStinger.baseGain ?? 0.92) * kindLevel * (this.muted ? 0.0 : clamped);
                 this._activeStinger.gain.gain.cancelScheduledValues(now);
                 this._activeStinger.gain.gain.setValueAtTime(this._activeStinger.gain.gain.value, now);
                 this._activeStinger.gain.gain.setTargetAtTime(nextGain, now, 0.015);
@@ -2815,6 +2844,35 @@ export class W900EngineSound {
 
     getSfxVolume() {
         return this.sfxVolume;
+    }
+
+    /** Ajusta o volume individual de um efeito (`kind` em SFX_KINDS; 1.0 = volume original). */
+    setSfxLevel(kind, level) {
+        if (!SFX_KINDS.includes(kind)) return null;
+        const parsed = Number(level);
+        const clamped = Number.isFinite(parsed) ? Math.max(0.0, Math.min(1.0, parsed)) : 1.0;
+        this.sfxLevels[kind] = clamped;
+        const st = this._activeStinger;
+        if (st && st.kind === kind && st.gain && st.ctx) {
+            try {
+                const now = st.ctx.currentTime;
+                st.gain.gain.cancelScheduledValues(now);
+                st.gain.gain.setValueAtTime(st.gain.gain.value, now);
+                st.gain.gain.setTargetAtTime((st.baseGain ?? 0.92) * clamped * (this.muted ? 0.0 : this.sfxVolume), now, 0.015);
+            } catch (_err) {
+                // Ignora caso o AudioNode já tenha encerrado
+            }
+        }
+        this._syncState();
+        return clamped;
+    }
+
+    getSfxLevel(kind) {
+        return SFX_KINDS.includes(kind) ? this.sfxLevels[kind] : null;
+    }
+
+    getSfxLevels() {
+        return { ...this.sfxLevels };
     }
 
     setEngineRunning(isRunning, silent = false) {
@@ -2957,8 +3015,8 @@ export class W900EngineSound {
     triggerFifthWheelCouple(intensity = 1.0) {
         if (this.muted) return;
         this.resume();
-        if (this.sfxVolume > 0.005) {
-            this._requestSampleDuck(0.48);
+        if (this.sfxVolume * this.sfxLevels.fifthWheel > 0.005) {
+            this._requestSampleDuck(0.48, this.sfxLevels.fifthWheel);
         }
         this._postCommand({ type: 'fifthWheelCouple', intensity });
     }
@@ -2966,8 +3024,8 @@ export class W900EngineSound {
     triggerTrailerHitch(intensity = 1.0) {
         if (this.muted) return;
         this.resume();
-        if (this.sfxVolume > 0.005) {
-            this._requestSampleDuck(0.20);
+        if (this.sfxVolume * this.sfxLevels.hitch > 0.005) {
+            this._requestSampleDuck(0.20, this.sfxLevels.hitch);
         }
         this._postCommand({ type: 'trailerHitch', intensity });
     }
@@ -3030,7 +3088,7 @@ export class W900EngineSound {
             const src = ctx.createBufferSource();
             const gain = ctx.createGain();
             src.buffer = buf;
-            const level = ALERT_LEVEL * this.sfxVolume;
+            const level = this.sfxVolume * this.sfxLevels.alert;
             gain.gain.value = level;
             gain.gain.setValueAtTime(level, ctx.currentTime);
             src.connect(gain);
@@ -3063,6 +3121,29 @@ export class W900EngineSound {
         }
     }
 
+    _ensureFailDecoded() {
+        if (this._failBuffer) return Promise.resolve(this._failBuffer);
+        if (this._failLoadPromise) return this._failLoadPromise;
+        if (!this.audioCtx || typeof fetch !== 'function') return Promise.resolve(null);
+        const ctx = this.audioCtx;
+        this._failLoadPromise = fetch(FAIL_AUDIO_URL)
+            .then((r) => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.arrayBuffer();
+            })
+            .then((bytes) => ctx.decodeAudioData(bytes))
+            .then((buf) => {
+                this._failBuffer = buf;
+                this._failLoadPromise = null;
+                return buf;
+            })
+            .catch(() => {
+                this._failLoadPromise = null;
+                return null;
+            });
+        return this._failLoadPromise;
+    }
+
     _getOrBuildStingerBuffer(ctx, kind) {
         const sr = Math.round(ctx.sampleRate || 48000);
         const key = `${kind}:${sr}`;
@@ -3088,20 +3169,23 @@ export class W900EngineSound {
         const reqId = ++this._stingerReqId;
         this._stopActiveStinger(0.018);
 
-        const launchBuffer = () => {
+        const launchBuffer = (fileBuf = null) => {
             if (reqId !== this._stingerReqId) return;
             if (this.muted) return;
-            const audioBuf = this._getOrBuildStingerBuffer(ctx, kind);
+            // Arquivo customizado toca no volume original (1.0); stinger procedural mantém o 0.92 de sempre
+            const audioBuf = fileBuf || this._getOrBuildStingerBuffer(ctx, kind);
+            const baseGain = fileBuf ? 1.0 : 0.92;
             const src = ctx.createBufferSource();
             const gain = ctx.createGain();
             src.buffer = audioBuf;
-            const peakGain = 0.92 * STINGER_LEVEL * (this.muted ? 0.0 : this.sfxVolume);
+            const kindLevel = this.sfxLevels[kind] ?? 1.0;
+            const peakGain = baseGain * kindLevel * (this.muted ? 0.0 : this.sfxVolume);
             gain.gain.value = peakGain;
             gain.gain.setValueAtTime(peakGain, ctx.currentTime);
             src.connect(gain);
             const masterOut = this._ensureMasterBus() || ctx.destination;
             gain.connect(masterOut);
-            const handle = { src, gain, ctx };
+            const handle = { src, gain, ctx, kind, baseGain };
             this._activeStinger = handle;
             src.onended = () => {
                 if (this._activeStinger === handle) {
@@ -3114,20 +3198,25 @@ export class W900EngineSound {
                     // Nó já desconectado
                 }
             };
-            if (this.sfxVolume > 0.005) {
+            if (this.sfxVolume * kindLevel > 0.005) {
                 const stingerDuckSec = Math.min(1.5, audioBuf.duration * 0.65);
-                this._requestSampleDuck(stingerDuckSec);
-                this._postCommand({ type: 'stingerDuck', duration: stingerDuckSec });
+                this._requestSampleDuck(stingerDuckSec, kindLevel);
+                this._postCommand({ type: 'stingerDuck', duration: stingerDuckSec, scale: kindLevel });
             }
             src.start();
         };
 
-        if (ctx.state === 'suspended') {
-            ctx.resume().then(() => {
+        const launch = () => {
+            if (kind === 'fail') {
+                this._ensureFailDecoded().then((buf) => launchBuffer(buf));
+            } else {
                 launchBuffer();
-            }).catch(() => {});
+            }
+        };
+        if (ctx.state === 'suspended') {
+            ctx.resume().then(launch).catch(() => {});
         } else {
-            launchBuffer();
+            launch();
         }
     }
 

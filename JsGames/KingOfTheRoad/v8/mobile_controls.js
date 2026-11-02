@@ -8,418 +8,79 @@
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// Botões da barra no estilo "contorno": fundo transparente, desenho em currentColor (branco por padrão;
+// a cor de estado é aplicada via CSS na borda do botão e no ícone)
+function svgEl(tag, attrs) {
+    const el = document.createElementNS(SVG_NS, tag);
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, String(v)));
+    return el;
+}
+
 function createEngineStartStopSvg() {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 100 100');
-    svg.setAttribute('class', 'mob-engine-svg');
-    svg.setAttribute('aria-hidden', 'true');
-
-    const defs = document.createElementNS(SVG_NS, 'defs');
-
-    const bezelGrad = document.createElementNS(SVG_NS, 'linearGradient');
-    bezelGrad.setAttribute('id', 'kotr-eng-bezel');
-    bezelGrad.setAttribute('x1', '12%');
-    bezelGrad.setAttribute('y1', '8%');
-    bezelGrad.setAttribute('x2', '88%');
-    bezelGrad.setAttribute('y2', '92%');
-    [
-        ['0%', '#f3f4f6'],
-        ['26%', '#9ca3af'],
-        ['50%', '#ffffff'],
-        ['76%', '#6b7280'],
-        ['100%', '#d1d5db']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        bezelGrad.appendChild(stop);
-    });
-
-    const capGrad = document.createElementNS(SVG_NS, 'radialGradient');
-    capGrad.setAttribute('id', 'kotr-eng-cap');
-    capGrad.setAttribute('cx', '44%');
-    capGrad.setAttribute('cy', '30%');
-    capGrad.setAttribute('r', '66%');
-    [
-        ['0%', '#2a2d32'],
-        ['65%', '#17191d'],
-        ['100%', '#0e1013']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        capGrad.appendChild(stop);
-    });
-
-    defs.appendChild(bezelGrad);
-    defs.appendChild(capGrad);
-    svg.appendChild(defs);
-
-    const outerBezel = document.createElementNS(SVG_NS, 'circle');
-    outerBezel.setAttribute('cx', '50');
-    outerBezel.setAttribute('cy', '50');
-    outerBezel.setAttribute('r', '48.5');
-    outerBezel.setAttribute('fill', 'url(#kotr-eng-bezel)');
-    svg.appendChild(outerBezel);
-
-    const innerGroove = document.createElementNS(SVG_NS, 'circle');
-    innerGroove.setAttribute('cx', '50');
-    innerGroove.setAttribute('cy', '50');
-    innerGroove.setAttribute('r', '42.4');
-    innerGroove.setAttribute('fill', '#0b0d10');
-    svg.appendChild(innerGroove);
-
-    const faceCap = document.createElementNS(SVG_NS, 'circle');
-    faceCap.setAttribute('cx', '50');
-    faceCap.setAttribute('cy', '50');
-    faceCap.setAttribute('r', '40.4');
-    faceCap.setAttribute('fill', 'url(#kotr-eng-cap)');
-    svg.appendChild(faceCap);
-
-    // 3 LEDs horizontais superiores (vermelhos acesos quando motor OFF; verdes acesos quando motor ON)
+    const svg = svgEl('svg', { viewBox: '10 10 80 80', class: 'mob-engine-svg', 'aria-hidden': 'true' });
+    // 3 LEDs de status (vermelhos com motor desligado; verdes com motor ligado)
     [33, 50, 67].forEach((cx) => {
-        const glow = document.createElementNS(SVG_NS, 'circle');
-        glow.setAttribute('cx', String(cx));
-        glow.setAttribute('cy', '27.5');
-        glow.setAttribute('r', '7.2');
-        glow.setAttribute('class', 'mob-eng-led-glow');
-        svg.appendChild(glow);
-
-        const led = document.createElementNS(SVG_NS, 'circle');
-        led.setAttribute('cx', String(cx));
-        led.setAttribute('cy', '27.5');
-        led.setAttribute('r', '5.6');
-        led.setAttribute('class', 'mob-eng-led');
-        svg.appendChild(led);
+        svg.appendChild(svgEl('circle', { cx, cy: 28.5, r: 7.2, class: 'mob-eng-led-glow' }));
+        svg.appendChild(svgEl('circle', { cx, cy: 28.5, r: 5.4, class: 'mob-eng-led' }));
     });
-
-    const addLabel = (txt, y, fontSize, fontWeight) => {
-        const t = document.createElementNS(SVG_NS, 'text');
-        t.setAttribute('x', '50');
-        t.setAttribute('y', String(y));
-        t.setAttribute('text-anchor', 'middle');
-        t.setAttribute('fill', '#ffffff');
-        t.setAttribute('font-family', 'Inter, Arial, sans-serif');
-        t.setAttribute('font-size', String(fontSize));
-        t.setAttribute('font-weight', String(fontWeight));
-        t.setAttribute('letter-spacing', '0.4');
+    [['START', 57.5], ['STOP', 76.5]].forEach(([txt, y]) => {
+        const t = svgEl('text', {
+            x: 50, y, 'text-anchor': 'middle', fill: 'currentColor',
+            'font-family': 'Inter, Arial, sans-serif', 'font-size': 17.5, 'font-weight': 800, 'letter-spacing': 0.4
+        });
         t.textContent = txt;
         svg.appendChild(t);
-    };
-
-    addLabel('START', 56.5, 17.5, 800);
-    addLabel('STOP', 75.5, 17.5, 800);
-
+    });
     return svg;
 }
 
 function createParkingBrakeSvg() {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 100 100');
-    svg.setAttribute('class', 'mob-park-svg');
-    svg.setAttribute('aria-hidden', 'true');
-
-    const defs = document.createElementNS(SVG_NS, 'defs');
-
-    const bezelGrad = document.createElementNS(SVG_NS, 'linearGradient');
-    bezelGrad.setAttribute('id', 'kotr-park-bezel');
-    bezelGrad.setAttribute('x1', '12%');
-    bezelGrad.setAttribute('y1', '8%');
-    bezelGrad.setAttribute('x2', '88%');
-    bezelGrad.setAttribute('y2', '92%');
-    [
-        ['0%', '#f3f4f6'],
-        ['26%', '#9ca3af'],
-        ['50%', '#ffffff'],
-        ['76%', '#6b7280'],
-        ['100%', '#d1d5db']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        bezelGrad.appendChild(stop);
-    });
-
-    const capGrad = document.createElementNS(SVG_NS, 'radialGradient');
-    capGrad.setAttribute('id', 'kotr-park-cap');
-    capGrad.setAttribute('cx', '46%');
-    capGrad.setAttribute('cy', '34%');
-    capGrad.setAttribute('r', '66%');
-    [
-        ['0%', '#1c1f24'],
-        ['65%', '#0f1115'],
-        ['100%', '#07080a']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        capGrad.appendChild(stop);
-    });
-
-    const haloGrad = document.createElementNS(SVG_NS, 'radialGradient');
-    haloGrad.setAttribute('id', 'kotr-park-halo');
-    haloGrad.setAttribute('cx', '50%');
-    haloGrad.setAttribute('cy', '50%');
-    haloGrad.setAttribute('r', '50%');
-    [
-        ['0%', 'rgba(255, 34, 34, 0.55)'],
-        ['62%', 'rgba(220, 20, 20, 0.22)'],
-        ['100%', 'rgba(220, 20, 20, 0)']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        haloGrad.appendChild(stop);
-    });
-
-    defs.appendChild(bezelGrad);
-    defs.appendChild(capGrad);
-    defs.appendChild(haloGrad);
-    svg.appendChild(defs);
-
-    const outerBezel = document.createElementNS(SVG_NS, 'circle');
-    outerBezel.setAttribute('cx', '50');
-    outerBezel.setAttribute('cy', '50');
-    outerBezel.setAttribute('r', '48.5');
-    outerBezel.setAttribute('fill', 'url(#kotr-park-bezel)');
-    svg.appendChild(outerBezel);
-
-    const innerGroove = document.createElementNS(SVG_NS, 'circle');
-    innerGroove.setAttribute('cx', '50');
-    innerGroove.setAttribute('cy', '50');
-    innerGroove.setAttribute('r', '42.4');
-    innerGroove.setAttribute('fill', '#050608');
-    svg.appendChild(innerGroove);
-
-    const faceCap = document.createElementNS(SVG_NS, 'circle');
-    faceCap.setAttribute('cx', '50');
-    faceCap.setAttribute('cy', '50');
-    faceCap.setAttribute('r', '40.4');
-    faceCap.setAttribute('fill', 'url(#kotr-park-cap)');
-    svg.appendChild(faceCap);
-
-    const halo = document.createElementNS(SVG_NS, 'circle');
-    halo.setAttribute('cx', '50');
-    halo.setAttribute('cy', '50');
-    halo.setAttribute('r', '36');
-    halo.setAttribute('fill', 'url(#kotr-park-halo)');
-    halo.setAttribute('class', 'mob-park-glow');
-    svg.appendChild(halo);
-
-    // Símbolo automotivo ISO (P): arcos laterais das sapatas + anel central + letra P
-    const leftShoe = document.createElementNS(SVG_NS, 'path');
-    leftShoe.setAttribute('d', 'M 26.87 30.59 A 30.2 30.2 0 0 0 26.87 69.41');
-    leftShoe.setAttribute('fill', 'none');
-    leftShoe.setAttribute('stroke-width', '6.4');
-    leftShoe.setAttribute('stroke-linecap', 'butt');
-    leftShoe.setAttribute('class', 'mob-park-stroke');
-    svg.appendChild(leftShoe);
-
-    const rightShoe = document.createElementNS(SVG_NS, 'path');
-    rightShoe.setAttribute('d', 'M 73.13 30.59 A 30.2 30.2 0 0 1 73.13 69.41');
-    rightShoe.setAttribute('fill', 'none');
-    rightShoe.setAttribute('stroke-width', '6.4');
-    rightShoe.setAttribute('stroke-linecap', 'butt');
-    rightShoe.setAttribute('class', 'mob-park-stroke');
-    svg.appendChild(rightShoe);
-
-    const ring = document.createElementNS(SVG_NS, 'circle');
-    ring.setAttribute('cx', '50');
-    ring.setAttribute('cy', '50');
-    ring.setAttribute('r', '20.5');
-    ring.setAttribute('fill', 'none');
-    ring.setAttribute('stroke-width', '6.0');
-    ring.setAttribute('class', 'mob-park-stroke');
-    svg.appendChild(ring);
-
-    const letterP = document.createElementNS(SVG_NS, 'path');
-    letterP.setAttribute(
-        'd',
-        'M 42.2 36.8 H 52.4 C 57.5 36.8 60.8 39.8 60.8 44.6 C 60.8 49.4 57.5 52.5 52.4 52.5 H 47.6 V 63.2 H 42.2 Z ' +
-        'M 47.6 41.4 V 47.9 H 51.9 C 54.1 47.9 55.4 46.7 55.4 44.6 C 55.4 42.6 54.1 41.4 51.9 41.4 Z'
-    );
-    letterP.setAttribute('fill-rule', 'evenodd');
-    letterP.setAttribute('class', 'mob-park-fill');
-    svg.appendChild(letterP);
-
+    const svg = svgEl('svg', { viewBox: '14 14 72 72', class: 'mob-park-svg', 'aria-hidden': 'true' });
+    // Símbolo automotivo ISO (P) em traço fino: arcos laterais das sapatas + anel central + letra P
+    const strokeAttrs = {
+        fill: 'none', stroke: 'currentColor', 'stroke-width': 3.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    };
+    svg.appendChild(svgEl('path', { d: 'M 26.87 30.59 A 30.2 30.2 0 0 0 26.87 69.41', ...strokeAttrs }));
+    svg.appendChild(svgEl('path', { d: 'M 73.13 30.59 A 30.2 30.2 0 0 1 73.13 69.41', ...strokeAttrs }));
+    svg.appendChild(svgEl('circle', { cx: 50, cy: 50, r: 20.5, ...strokeAttrs }));
+    svg.appendChild(svgEl('path', {
+        d: 'M 44.6 61.6 V 38.6 H 51.6 C 56.0 38.6 58.6 41.2 58.6 45.0 C 58.6 48.8 56.0 51.4 51.6 51.4 H 44.6',
+        ...strokeAttrs
+    }));
     return svg;
 }
 
 function createTrailerHitchSvg() {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 100 100');
-    svg.setAttribute('class', 'mob-hitch-svg');
-    svg.setAttribute('aria-hidden', 'true');
-
-    const defs = document.createElementNS(SVG_NS, 'defs');
-
-    const bezelGrad = document.createElementNS(SVG_NS, 'linearGradient');
-    bezelGrad.setAttribute('id', 'kotr-hitch-bezel');
-    bezelGrad.setAttribute('x1', '12%');
-    bezelGrad.setAttribute('y1', '8%');
-    bezelGrad.setAttribute('x2', '88%');
-    bezelGrad.setAttribute('y2', '92%');
-    [
-        ['0%', '#f3f4f6'],
-        ['26%', '#9ca3af'],
-        ['50%', '#ffffff'],
-        ['76%', '#6b7280'],
-        ['100%', '#d1d5db']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        bezelGrad.appendChild(stop);
-    });
-
-    const capOffGrad = document.createElementNS(SVG_NS, 'radialGradient');
-    capOffGrad.setAttribute('id', 'kotr-hitch-cap-off');
-    capOffGrad.setAttribute('cx', '44%');
-    capOffGrad.setAttribute('cy', '32%');
-    capOffGrad.setAttribute('r', '68%');
-    [
-        ['0%', '#363b44'],
-        ['62%', '#23272e'],
-        ['100%', '#15181d']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        capOffGrad.appendChild(stop);
-    });
-
-    const capOnGrad = document.createElementNS(SVG_NS, 'radialGradient');
-    capOnGrad.setAttribute('id', 'kotr-hitch-cap-on');
-    capOnGrad.setAttribute('cx', '50%');
-    capOnGrad.setAttribute('cy', '49%');
-    capOnGrad.setAttribute('r', '54%');
-    [
-        ['0%', '#2d9e4e'],
-        ['44%', '#1f5c33'],
-        ['76%', '#212929'],
-        ['100%', '#1a1f23']
-    ].forEach(([offset, color]) => {
-        const stop = document.createElementNS(SVG_NS, 'stop');
-        stop.setAttribute('offset', offset);
-        stop.setAttribute('stop-color', color);
-        capOnGrad.appendChild(stop);
-    });
-
-    defs.appendChild(bezelGrad);
-    defs.appendChild(capOffGrad);
-    defs.appendChild(capOnGrad);
-    svg.appendChild(defs);
-
-    const outerBezel = document.createElementNS(SVG_NS, 'circle');
-    outerBezel.setAttribute('cx', '50');
-    outerBezel.setAttribute('cy', '50');
-    outerBezel.setAttribute('r', '48.5');
-    outerBezel.setAttribute('fill', 'url(#kotr-hitch-bezel)');
-    svg.appendChild(outerBezel);
-
-    const innerGroove = document.createElementNS(SVG_NS, 'circle');
-    innerGroove.setAttribute('cx', '50');
-    innerGroove.setAttribute('cy', '50');
-    innerGroove.setAttribute('r', '42.4');
-    innerGroove.setAttribute('fill', '#07090c');
-    svg.appendChild(innerGroove);
-
-    const faceOff = document.createElementNS(SVG_NS, 'circle');
-    faceOff.setAttribute('cx', '50');
-    faceOff.setAttribute('cy', '50');
-    faceOff.setAttribute('r', '40.4');
-    faceOff.setAttribute('fill', 'url(#kotr-hitch-cap-off)');
-    faceOff.setAttribute('stroke', '#4a505b');
-    faceOff.setAttribute('stroke-width', '1.0');
-    svg.appendChild(faceOff);
-
-    const faceOn = document.createElementNS(SVG_NS, 'circle');
-    faceOn.setAttribute('cx', '50');
-    faceOn.setAttribute('cy', '50');
-    faceOn.setAttribute('r', '40.4');
-    faceOn.setAttribute('fill', 'url(#kotr-hitch-cap-on)');
-    faceOn.setAttribute('class', 'mob-hitch-cap-on');
-    svg.appendChild(faceOn);
-
-    const ringOn = document.createElementNS(SVG_NS, 'circle');
-    ringOn.setAttribute('cx', '50');
-    ringOn.setAttribute('cy', '50');
-    ringOn.setAttribute('r', '39.8');
-    ringOn.setAttribute('fill', 'none');
-    ringOn.setAttribute('stroke', '#28f25e');
-    ringOn.setAttribute('stroke-width', '2.5');
-    ringOn.setAttribute('class', 'mob-hitch-ring-on');
-    svg.appendChild(ringOn);
-
+    const svg = svgEl('svg', { viewBox: '13 33 72 29', class: 'mob-hitch-svg', 'aria-hidden': 'true' });
+    const fill = { fill: 'currentColor' };
     // Cavalo mecânico perfilado voltado para a esquerda (com recorte da janela e arcos de roda)
-    const tractor = document.createElementNS(SVG_NS, 'path');
-    tractor.setAttribute(
-        'd',
-        'M 16.0 57.2 V 49.0 L 17.7 40.8 Q 22.4 38.6 28.4 37.6 V 53.0 H 42.6 L 44.2 55.2 V 57.2 ' +
-        'H 41.8 A 4.2 4.2 0 0 0 33.4 57.2 H 25.8 A 4.2 4.2 0 0 0 17.4 57.2 Z ' +
-        'M 18.4 42.4 L 23.6 41.9 V 47.4 H 17.4 Z'
-    );
-    tractor.setAttribute('fill-rule', 'evenodd');
-    tractor.setAttribute('class', 'mob-hitch-fill');
-    svg.appendChild(tractor);
-
-    // Semirreboque baú à direita + longarina inferior com recortes para 1 roda dianteira + 2 rodas traseiras
-    const trailerBox = document.createElementNS(SVG_NS, 'rect');
-    trailerBox.setAttribute('x', '46.8');
-    trailerBox.setAttribute('y', '36.8');
-    trailerBox.setAttribute('width', '35.2');
-    trailerBox.setAttribute('height', '16.6');
-    trailerBox.setAttribute('rx', '1.3');
-    trailerBox.setAttribute('class', 'mob-hitch-fill');
-    svg.appendChild(trailerBox);
-
-    const trailerSkirt = document.createElementNS(SVG_NS, 'path');
-    trailerSkirt.setAttribute(
-        'd',
-        'M 47.4 54.6 H 81.4 V 57.2 H 80.4 A 3.9 3.9 0 0 0 72.6 57.2 ' +
-        'H 71.6 A 3.9 3.9 0 0 0 63.8 57.2 H 56.7 A 3.9 3.9 0 0 0 48.9 57.2 H 47.4 Z'
-    );
-    trailerSkirt.setAttribute('class', 'mob-hitch-fill');
-    svg.appendChild(trailerSkirt);
-
-    // Rodas do cavalo (21.6, 37.6) e da carreta (52.8 + tandem 67.7, 76.5)
+    svg.appendChild(svgEl('path', {
+        d: 'M 16.0 57.2 V 49.0 L 17.7 40.8 Q 22.4 38.6 28.4 37.6 V 53.0 H 42.6 L 44.2 55.2 V 57.2 ' +
+           'H 41.8 A 4.2 4.2 0 0 0 33.4 57.2 H 25.8 A 4.2 4.2 0 0 0 17.4 57.2 Z ' +
+           'M 18.4 42.4 L 23.6 41.9 V 47.4 H 17.4 Z',
+        'fill-rule': 'evenodd', ...fill
+    }));
+    // Semirreboque baú + longarina inferior com recortes de roda
+    svg.appendChild(svgEl('rect', { x: 46.8, y: 36.8, width: 35.2, height: 16.6, rx: 1.3, ...fill }));
+    svg.appendChild(svgEl('path', {
+        d: 'M 47.4 54.6 H 81.4 V 57.2 H 80.4 A 3.9 3.9 0 0 0 72.6 57.2 ' +
+           'H 71.6 A 3.9 3.9 0 0 0 63.8 57.2 H 56.7 A 3.9 3.9 0 0 0 48.9 57.2 H 47.4 Z',
+        ...fill
+    }));
     [21.6, 37.6, 52.8, 67.7, 76.5].forEach((cx) => {
-        const tire = document.createElementNS(SVG_NS, 'circle');
-        tire.setAttribute('cx', String(cx));
-        tire.setAttribute('cy', '57.6');
-        tire.setAttribute('r', '3.05');
-        tire.setAttribute('fill', 'none');
-        tire.setAttribute('stroke-width', '1.5');
-        tire.setAttribute('class', 'mob-hitch-stroke');
-        svg.appendChild(tire);
-
-        const hub = document.createElementNS(SVG_NS, 'circle');
-        hub.setAttribute('cx', String(cx));
-        hub.setAttribute('cy', '57.6');
-        hub.setAttribute('r', '0.95');
-        hub.setAttribute('class', 'mob-hitch-fill');
-        svg.appendChild(hub);
+        svg.appendChild(svgEl('circle', { cx, cy: 57.6, r: 3.05, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }));
+        svg.appendChild(svgEl('circle', { cx, cy: 57.6, r: 0.95, ...fill }));
     });
-
-    // Seta simples (→) no estado desengatado
-    const arrowOff = document.createElementNS(SVG_NS, 'path');
-    arrowOff.setAttribute(
-        'd',
-        'M 33.4 43.5 H 39.4 V 41.1 L 44.1 45.2 L 39.4 49.3 V 46.9 H 33.4 Z'
-    );
-    arrowOff.setAttribute('class', 'mob-hitch-fill mob-hitch-arrow-off');
-    svg.appendChild(arrowOff);
-
-    // Setas duplas opostas (← →) no estado engatado
-    const arrowOn = document.createElementNS(SVG_NS, 'path');
-    arrowOn.setAttribute(
-        'd',
-        'M 36.9 43.7 H 33.6 V 41.5 L 29.7 45.2 L 33.6 48.9 V 46.7 H 36.9 Z ' +
-        'M 38.3 43.7 H 41.6 V 41.5 L 45.5 45.2 L 41.6 48.9 V 46.7 H 38.3 Z'
-    );
-    arrowOn.setAttribute('class', 'mob-hitch-fill mob-hitch-arrow-on');
-    svg.appendChild(arrowOn);
-
+    // Seta simples (→) desengatado; setas opostas (← →) engatado
+    svg.appendChild(svgEl('path', {
+        d: 'M 33.4 43.5 H 39.4 V 41.1 L 44.1 45.2 L 39.4 49.3 V 46.9 H 33.4 Z',
+        class: 'mob-hitch-arrow-off', fill: 'currentColor'
+    }));
+    svg.appendChild(svgEl('path', {
+        d: 'M 36.9 43.7 H 33.6 V 41.5 L 29.7 45.2 L 33.6 48.9 V 46.7 H 36.9 Z ' +
+           'M 38.3 43.7 H 41.6 V 41.5 L 45.5 45.2 L 41.6 48.9 V 46.7 H 38.3 Z',
+        class: 'mob-hitch-arrow-on', fill: 'currentColor'
+    }));
     return svg;
 }
 
@@ -502,6 +163,75 @@ function createVideoCameraSvg() {
 
     svg.appendChild(body);
     svg.appendChild(cone);
+    return svg;
+}
+
+// Ícones de farol no mesmo estilo monocromático (currentColor) da buzina/câmera:
+//  - farol baixo (feixes inclinados): estágios 1 (apagado) e 2 (luzes de posição)
+//  - farol alto (feixes horizontais): estágio 3 (faróis)
+function createHeadlightSvg(highBeam) {
+    const svg = svgEl('svg', {
+        viewBox: '0 0 32 22',
+        class: `mob-light-svg ${highBeam ? 'mob-light-high' : 'mob-light-low'}`,
+        'aria-hidden': 'true'
+    });
+    svg.appendChild(svgEl('path', {
+        d: 'M 17.2 2.6 C 25.4 2.6 30.2 6.4 30.2 11 C 30.2 15.6 25.4 19.4 17.2 19.4 Z',
+        fill: 'none', stroke: 'currentColor', 'stroke-width': 2.3, 'stroke-linejoin': 'round'
+    }));
+    const beams = highBeam
+        ? ['3.6', '7.3', '11.0', '14.7', '18.4'].map((y) => [1.6, y, 12.6, y])
+        : [3.8, 8.0, 12.2, 16.4].map((y) => [1.8, y + 3.4, 12.6, y]);
+    beams.forEach(([x1, y1, x2, y2]) => {
+        svg.appendChild(svgEl('line', {
+            x1, y1, x2, y2, stroke: 'currentColor', 'stroke-width': 2.1, 'stroke-linecap': 'round'
+        }));
+    });
+    return svg;
+}
+
+// Ícone de alto-falante (som ligado: ondas; mudo: X), branco via currentColor
+function createSpeakerSvg() {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 512 512');
+    svg.setAttribute('class', 'mob-sound-svg');
+    svg.setAttribute('aria-hidden', 'true');
+
+    const body = document.createElementNS(SVG_NS, 'path');
+    body.setAttribute(
+        'd',
+        'M 24 150 H 108 L 280 36 C 292 28 306 36 306 50 V 462 C 306 476 292 484 280 476 L 108 362 H 24 ' +
+        'C 12 362 4 354 4 342 V 170 C 4 158 12 150 24 150 Z'
+    );
+    body.setAttribute('fill', 'currentColor');
+    svg.appendChild(body);
+
+    const waves = document.createElementNS(SVG_NS, 'g');
+    waves.setAttribute('class', 'mob-sound-waves');
+    [['M 368 182 A 108 108 0 0 1 368 330', '34'], ['M 432 112 A 196 196 0 0 1 432 400', '34']].forEach(([d, w]) => {
+        const arc = document.createElementNS(SVG_NS, 'path');
+        arc.setAttribute('d', d);
+        arc.setAttribute('fill', 'none');
+        arc.setAttribute('stroke', 'currentColor');
+        arc.setAttribute('stroke-width', w);
+        waves.appendChild(arc);
+    });
+    svg.appendChild(waves);
+
+    const cross = document.createElementNS(SVG_NS, 'g');
+    cross.setAttribute('class', 'mob-sound-x');
+    [['362', '186', '494', '318'], ['494', '186', '362', '318']].forEach(([x1, y1, x2, y2]) => {
+        const ln = document.createElementNS(SVG_NS, 'line');
+        ln.setAttribute('x1', x1);
+        ln.setAttribute('y1', y1);
+        ln.setAttribute('x2', x2);
+        ln.setAttribute('y2', y2);
+        ln.setAttribute('stroke', 'currentColor');
+        ln.setAttribute('stroke-width', '38');
+        ln.setAttribute('stroke-linecap', 'round');
+        cross.appendChild(ln);
+    });
+    svg.appendChild(cross);
     return svg;
 }
 
@@ -746,12 +476,16 @@ export class MobileControls {
             window.addEventListener('mouseup', stopHornMouse);
         }
 
-        const btnLights = makeActionBtn('💡', 'Toggle lights', () => {
+        const btnLights = makeActionBtn('', 'Toggle lights', () => {
             this.truck.toggleHeadlights();
         });
-        const btnSound = makeActionBtn('🔊', 'Mute or unmute sound', () => {
+        btnLights.classList.add('mob-light-icon-btn');
+        btnLights.replaceChildren(createHeadlightSvg(false), createHeadlightSvg(true));
+        const btnSound = makeActionBtn('', 'Mute or unmute sound', () => {
             this.truck.toggleEngineSound();
         });
+        btnSound.classList.add('mob-sound-icon-btn');
+        btnSound.replaceChildren(createSpeakerSvg());
         const btnHelp = makeActionBtn('?', 'Show controls helper', () => {
             const infoEl = document.getElementById('game-controls-info');
             if (infoEl) {
@@ -759,12 +493,13 @@ export class MobileControls {
             }
         });
 
+        // Ordem (esquerda -> direita): Start/Stop, Freio de mão, Luzes, Buzina, Carreta, Câmeras, Som, Ajuda, Tela cheia
         actionBar.appendChild(btnEngine);
         actionBar.appendChild(btnPark);
+        actionBar.appendChild(btnLights);
+        actionBar.appendChild(btnHorn);
         actionBar.appendChild(btnHitch);
         actionBar.appendChild(btnCam);
-        actionBar.appendChild(btnHorn);
-        actionBar.appendChild(btnLights);
         actionBar.appendChild(btnSound);
         actionBar.appendChild(btnHelp);
 
@@ -1162,13 +897,14 @@ export class MobileControls {
         const lightState = this.truck.lightingState || 0;
         if (lightState !== this._lastLightingState) {
             this._lastLightingState = lightState;
-            this.uiRefs.btnLights.classList.toggle('is-warn-active', lightState > 0);
+            this.uiRefs.btnLights.classList.toggle('is-lights-on', lightState > 0);
+            this.uiRefs.btnLights.classList.toggle('is-high-beam', lightState >= 2);
         }
 
         const muted = Boolean(this.truck.engineSound && this.truck.engineSound.isMuted());
         if (muted !== this._lastMutedState) {
             this._lastMutedState = muted;
-            this.uiRefs.btnSound.textContent = muted ? '🔇' : '🔊';
+            this.uiRefs.btnSound.classList.toggle('is-muted', muted);
         }
 
         const camId = this.camera.currentCamera;
