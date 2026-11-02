@@ -442,8 +442,39 @@
       animation: tiltPhoneLandscape 2.4s ease-in-out infinite;
     }
 
+    /* Mobile: o overlay aparece (1) logo após "Play Game", sempre, oferecendo tela cheia horizontal;
+       (2) durante o jogo, apenas se o aparelho estiver na vertical (pedindo para girar) */
+    body.is-mobile.fs-prompt #rotate-device-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 28px;
+      background: rgba(15, 23, 42, 0.97);
+      color: #f8fafc;
+      text-align: center;
+      touch-action: none;
+    }
+
+    .overlay-rotate-text {
+      display: none;
+    }
+
+    body.game-started:not(.fs-prompt) .overlay-rotate-text {
+      display: block;
+    }
+
+    body.game-started:not(.fs-prompt) .overlay-fs-text,
+    body.game-started:not(.fs-prompt) #continue-windowed-btn {
+      display: none;
+    }
+
     @media (orientation: portrait) {
-      body.is-mobile #rotate-device-overlay {
+      body.is-mobile.game-started #rotate-device-overlay {
         position: fixed;
         inset: 0;
         z-index: 9999;
@@ -860,13 +891,25 @@
 <body>
   <div id="rotate-device-overlay" aria-live="polite">
     <div class="rotate-phone-icon">📱</div>
-    <h2 class="text-2xl font-bold" style="color: #ffd600;">Gire o celular para a horizontal</h2>
-    <p class="text-sm text-gray-300 max-w-xs">
-      Posicione o aparelho na horizontal (modo paisagem) para jogar com todos os controles na parte inferior da tela.
-    </p>
+    <div class="overlay-fs-text">
+      <h2 class="text-2xl font-bold" style="color: #ffd600;">Jogar em tela cheia</h2>
+      <p class="text-sm text-gray-300 max-w-xs mt-2">
+        Toque no botão abaixo para entrar no jogo em tela cheia, na horizontal, com todos os controles na parte inferior da tela.
+      </p>
+    </div>
+    <div class="overlay-rotate-text">
+      <h2 class="text-2xl font-bold" style="color: #ffd600;">Gire o celular para a horizontal</h2>
+      <p class="text-sm text-gray-300 max-w-xs mt-2">
+        Posicione o aparelho na horizontal (modo paisagem) para jogar com todos os controles na parte inferior da tela.
+      </p>
+    </div>
     <button id="force-landscape-btn" type="button" style="display: none;"
       class="mt-2 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-2.5 px-5 rounded-full text-sm shadow-lg">
       ⛶ Tela Cheia Horizontal
+    </button>
+    <button id="continue-windowed-btn" type="button"
+      class="text-xs text-gray-400 underline underline-offset-2">
+      Continuar sem tela cheia
     </button>
   </div>
 
@@ -1628,14 +1671,21 @@
     window.onload = () => {
       adaptStartScreenForDevice(detectMobileDevice());
       const forceLandscapeBtn = document.getElementById('force-landscape-btn');
-      if (
-        forceLandscapeBtn &&
+      const continueWindowedBtn = document.getElementById('continue-windowed-btn');
+      const canFullscreen = Boolean(
         document.documentElement &&
         (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)
-      ) {
+      );
+      if (forceLandscapeBtn && canFullscreen) {
         forceLandscapeBtn.style.display = 'inline-block';
         forceLandscapeBtn.addEventListener('click', () => {
           enterFullscreenLandscape();
+          startGame();
+        });
+      }
+      if (continueWindowedBtn) {
+        continueWindowedBtn.addEventListener('click', () => {
+          startGame();
         });
       }
 
@@ -1649,8 +1699,11 @@
       const startScreen = document.getElementById('start-screen');
       const gameContainer = document.getElementById('game-container');
 
-      startButton.addEventListener('click', () => {
+      // Inicia o jogo de fato (no mobile, chamado pelos botões do overlay de tela cheia)
+      const startGame = () => {
+        document.body.classList.remove('fs-prompt');
         if (gameStarted) return;
+        document.body.classList.add('game-started');
         if (document.body.classList.contains('is-mobile')) {
           tryLockLandscape();
         }
@@ -1660,6 +1713,17 @@
         if (w900.engineSound) {
           w900.engineSound.resume();
         }
+      };
+
+      startButton.addEventListener('click', () => {
+        if (gameStarted) return;
+        // Mobile com suporte a tela cheia: sempre oferece a tela cheia horizontal antes de entrar no jogo,
+        // mesmo que o aparelho já esteja na horizontal
+        if (document.body.classList.contains('is-mobile') && canFullscreen) {
+          document.body.classList.add('fs-prompt');
+          return;
+        }
+        startGame();
       });
     };
   </script>

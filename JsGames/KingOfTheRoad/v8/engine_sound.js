@@ -20,6 +20,14 @@ const ALERT_AUDIO_URL = new URL('./audio/alert.mp3', import.meta.url).href;
 const ALERT_MIN_INTERVAL_MS = 600;
 // Som de falha de fase (arquivo customizado); se não carregar, usa o stinger procedural antigo
 const FAIL_AUDIO_URL = new URL('./audio/fail.mp3', import.meta.url).href;
+// Buzina (arquivo customizado de 3 s): ataque 0..~0.6 s, tom sustentado até ~2.05 s, cauda natural até 3 s.
+// Enquanto o botão é segurado, a região sustentada fica em loop (com crossfade); ao soltar, toca a cauda do arquivo.
+const HORN_AUDIO_URL = new URL('./audio/horn.mp3', import.meta.url).href;
+const HORN_LOOP_START_SEC = 0.75;
+const HORN_LOOP_END_SEC = 2.0;
+const HORN_TAIL_START_SEC = 2.0;
+const HORN_LOOP_XFADE_SEC = 0.08;
+const HORN_RELEASE_XFADE_SEC = 0.04;
 
 const PROCEDURAL_STARTUP_DURATION = 2.32;
 const SCANIA_GRAVE_BASE_RATE = 0.78;
@@ -2245,6 +2253,10 @@ export class W900EngineSound {
         this._alertLoadPromise = null;
         this._failBuffer = null;
         this._failLoadPromise = null;
+        this._hornBuffer = null;
+        this._hornLoadPromise = null;
+        this._hornVoice = null;
+        this._dspHornOn = false;
         this._lastAlertMs = -Infinity;
 
         this._sampleEngineData = null;
@@ -2592,6 +2604,7 @@ export class W900EngineSound {
             this._ensureSampleEngineDecoded();
             this._ensureAlertDecoded();
             this._ensureFailDecoded();
+            this._ensureHornDecoded();
             this._setupAudioGraph();
         }
     }
@@ -2756,6 +2769,11 @@ export class W900EngineSound {
     }
 
     _postCommand(msg) {
+        // Buzina: usa o arquivo customizado quando disponível; o DSP procedural fica só como fallback
+        if (msg && msg.type === 'horn' && !msg._toDsp) {
+            this._handleHornCommand(Boolean(msg.active));
+            return;
+        }
         if (this.workletNode) {
             this.workletNode.port.postMessage(msg);
         } else if (this.dspCore) {
@@ -2852,6 +2870,7 @@ export class W900EngineSound {
         const parsed = Number(level);
         const clamped = Number.isFinite(parsed) ? Math.max(0.0, Math.min(1.0, parsed)) : 1.0;
         this.sfxLevels[kind] = clamped;
+        if (kind === 'horn') this._refreshHornVoiceGain();
         const st = this._activeStinger;
         if (st && st.kind === kind && st.gain && st.ctx) {
             try {
@@ -2865,6 +2884,19 @@ export class W900EngineSound {
         }
         this._syncState();
         return clamped;
+    }
+
+    _refreshHornVoiceGain() {
+        const v = this._hornVoice;
+        if (!v) return;
+        try {
+            const now = v.ctx.currentTime;
+            v.gain.gain.cancelScheduledValues(now);
+            v.gain.gain.setValueAtTime(v.gain.gain.value, now);
+            v.gain.gain.setTargetAtTime(this._hornSampleGain(), now, 0.015);
+        } catch (_err) {
+            // Ignora se já encerrado
+        }
     }
 
     getSfxLevel(kind) {
@@ -3119,6 +3151,138 @@ export class W900EngineSound {
         } catch (_err) {
             // Ignora se o BufferSourceNode já tiver encerrado naturalmente
         }
+    }
+
+    _ensureHornDecoded() {
+        if (this._hornBuffer) return Promise.resolve(this._hornBuffer);
+        if (this._hornLoadPromise) return this._hornLoadPromise;
+        if (!this.audioCtx || typeof fetch !== 'function') return Promise.resolve(null);
+        const ctx = this.audioCtx;
+        this._hornLoadPromise = fetch(HORN_AUDIO_URL)
+            .then((r) => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.arrayBuffer();
+            })
+            .then((bytes) => ctx.decodeAudioData(bytes))
+            .then((raw) => {
+                this._hornBuffer = this._buildHornLoopBuffer(ctx, raw);
+                this._hornLoadPromise = null;
+                return this._hornBuffer;
+            })
+            .catch(() => {
+                this._hornLoadPromise = null;
+                return null;
+            });
+        return this._hornLoadPromise;
+    }
+
+    /**
+     * Copia o áudio da buzina aplicando um crossfade no fim da região de loop com o trecho imediatamente
+     * anterior ao início do loop, para que o salto loopEnd -> loopStart seja contínuo (sem clique).
+     */
+    _buildHornLoopBuffer(ctx, raw) {
+        const sr = raw.sampleRate;
+        const out = ctx.createBuffer(raw.numberOfChannels, raw.length, sr);
+        const ls = Math.round(HORN_LOOP_START_SEC * sr);
+        const le = Math.min(raw.length - 1, Math.round(HORN_LOOP_END_SEC * sr));
+        const xf = Math.min(Math.round(HORN_LOOP_XFADE_SEC * sr), ls, le - ls);
+        for (let c = 0; c < raw.numberOfChannels; c++) {
+            const src = raw.getChannelData(c);
+            const dst = out.getChannelData(c);
+            dst.set(src);
+            for (let k = 0; k < xf; k++) {
+                const w = 0.5 - 0.5 * Math.cos(Math.PI * (k / xf));
+                const i = le - xf + k;
+                dst[i] = src[i] * (1.0 - w) + src[ls - xf + k] * w;
+            }
+        }
+        return out;
+    }
+
+    _hornSampleGain() {
+        return this.muted ? 0.0 : this.sfxVolume * this.sfxLevels.horn;
+    }
+
+    _handleHornCommand(active) {
+        if (active) {
+            if (this._hornBuffer && this.audioCtx) {
+                this._startHornVoice();
+            } else {
+                // Arquivo ainda não carregado (ou indisponível, ex.: file://): buzina procedural
+                this._dspHornOn = true;
+                this._postCommand({ type: 'horn', active: true, _toDsp: true });
+                this._ensureHornDecoded();
+            }
+        } else {
+            this._releaseHornVoice();
+            if (this._dspHornOn) {
+                this._dspHornOn = false;
+                this._postCommand({ type: 'horn', active: false, _toDsp: true });
+            }
+        }
+    }
+
+    _startHornVoice() {
+        const ctx = this.audioCtx;
+        if (this._hornVoice) this._releaseHornVoice(0.012, false);
+        const now = ctx.currentTime;
+        const src = ctx.createBufferSource();
+        src.buffer = this._hornBuffer;
+        src.loop = true;
+        src.loopStart = HORN_LOOP_START_SEC;
+        src.loopEnd = HORN_LOOP_END_SEC;
+        const gain = ctx.createGain();
+        const level = this._hornSampleGain();
+        gain.gain.value = level;
+        gain.gain.setValueAtTime(level, now);
+        src.connect(gain);
+        gain.connect(this._ensureMasterBus() || ctx.destination);
+        src.onended = () => {
+            try {
+                src.disconnect();
+                gain.disconnect();
+            } catch (_err) {
+                // Nó já desconectado
+            }
+        };
+        src.start(now);
+        this._hornVoice = { src, gain, ctx };
+    }
+
+    _releaseHornVoice(fadeSec = HORN_RELEASE_XFADE_SEC, playTail = true) {
+        const v = this._hornVoice;
+        if (!v) return;
+        this._hornVoice = null;
+        const ctx = v.ctx;
+        const now = ctx.currentTime;
+        try {
+            v.gain.gain.cancelScheduledValues(now);
+            v.gain.gain.setValueAtTime(v.gain.gain.value, now);
+            v.gain.gain.linearRampToValueAtTime(0.0, now + fadeSec);
+            v.src.stop(now + fadeSec + 0.01);
+        } catch (_err) {
+            // Ignora se já encerrado
+        }
+        const level = this._hornSampleGain();
+        if (!playTail || !this._hornBuffer || level <= 0.0) return;
+        // Cauda natural do arquivo (2.0 s -> 3.0 s), entrando em crossfade com o loop
+        const tail = ctx.createBufferSource();
+        tail.buffer = this._hornBuffer;
+        const tg = ctx.createGain();
+        tg.gain.value = 0.0;
+        tg.gain.setValueAtTime(0.0, now);
+        tg.gain.linearRampToValueAtTime(level, now + fadeSec);
+        tail.connect(tg);
+        tg.connect(this._ensureMasterBus() || ctx.destination);
+        tail.onended = () => {
+            try {
+                tail.disconnect();
+                tg.disconnect();
+            } catch (_err) {
+                // Nó já desconectado
+            }
+        };
+        tail.start(now, HORN_TAIL_START_SEC);
     }
 
     _ensureFailDecoded() {
