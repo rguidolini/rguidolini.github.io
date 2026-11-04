@@ -25,6 +25,9 @@ export class KenworthW900 {
         this.trailer = null;
         this.worldTrailer = params.worldTrailer || null;
         this._kingPinInFifthWheel = false;
+        // Estatísticas da partida (usadas na tela de zeramento)
+        this.stats = { horns: 0, hitches: 0 };
+        this._hornHeld = false;
         this.engineSound = new W900EngineSound();
         this.engineSound.start();
 
@@ -307,8 +310,15 @@ export class KenworthW900 {
     }
 
     setHorn(isOn) {
+        const on = Boolean(isOn);
+        if (on && !this._hornHeld && this.stats) this.stats.horns++;
+        this._hornHeld = on;
         if (!this.engineSound) return;
-        this.engineSound.setHorn(Boolean(isOn));
+        this.engineSound.setHorn(on);
+    }
+
+    resetStats() {
+        this.stats = { horns: 0, hitches: 0 };
     }
 
     setEngineVariant(variantId) {
@@ -778,6 +788,7 @@ export class KenworthW900 {
         trailer.Engage();
         this.trailer = trailer;
         this._kingPinInFifthWheel = true;
+        if (this.stats) this.stats.hitches++;
         if (this.engineSound) this.engineSound.triggerTrailerHitch();
         this.showinfo("Trailer successfully hitched", {
             group: 'trailer-state',

@@ -235,6 +235,44 @@ function createSpeakerSvg() {
     return svg;
 }
 
+/**
+ * Cria um "botão" estático (mesmo círculo/contorno e mesmos ícones da barra do jogo) para as telas de ajuda.
+ * kind: engine | park | lights | horn | hitch | camera | sound | help | fullscreen
+ */
+export function createGuideIcon(kind) {
+    const el = document.createElement('span');
+    el.className = 'guide-btn';
+    el.setAttribute('aria-hidden', 'true');
+    const builders = {
+        engine: () => createEngineStartStopSvg(),
+        park: () => createParkingBrakeSvg(),
+        lights: () => createHeadlightSvg(false),
+        horn: () => createAirHornSvg(),
+        hitch: () => createTrailerHitchSvg(),
+        camera: () => createVideoCameraSvg(),
+        sound: () => createSpeakerSvg()
+    };
+    if (builders[kind]) {
+        el.appendChild(builders[kind]());
+    } else {
+        el.textContent = kind === 'help' ? '?' : (kind === 'fullscreen' ? '⛶' : '');
+        el.classList.add('guide-btn-text');
+    }
+    return el;
+}
+
+/** Preenche todos os elementos [data-guide-icons="a b c"] da página com os ícones correspondentes. */
+export function renderGuideIcons(root = document) {
+    root.querySelectorAll('[data-guide-icons]').forEach((holder) => {
+        if (holder.dataset.guideRendered === '1') return;
+        holder.dataset.guideRendered = '1';
+        holder.replaceChildren();
+        holder.getAttribute('data-guide-icons').split(/\s+/).filter(Boolean).forEach((kind) => {
+            holder.appendChild(createGuideIcon(kind));
+        });
+    });
+}
+
 export function detectMobileDevice() {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
     const ua = navigator.userAgent || '';
@@ -336,6 +374,12 @@ export class MobileControls {
         }
     }
 
+    _setCamDrawerOpen(open) {
+        this.camDrawerOpen = Boolean(open);
+        if (this.uiRefs.camDrawer) this.uiRefs.camDrawer.style.display = this.camDrawerOpen ? 'flex' : 'none';
+        if (this.uiRefs.btnCam) this.uiRefs.btnCam.classList.toggle('is-drawer-open', this.camDrawerOpen);
+    }
+
     _unlockAudio() {
         if (this.truck && this.truck.engineSound) {
             this.truck.engineSound.resume();
@@ -413,8 +457,7 @@ export class MobileControls {
         btnHitch.classList.add('mob-hitch-btn');
         btnHitch.replaceChildren(createTrailerHitchSvg());
         const btnCam = makeActionBtn('', 'Switch camera', () => {
-            this.camDrawerOpen = !this.camDrawerOpen;
-            this.uiRefs.camDrawer.style.display = this.camDrawerOpen ? 'flex' : 'none';
+            this._setCamDrawerOpen(!this.camDrawerOpen);
         });
         btnCam.classList.add('mob-cam-icon-btn');
         btnCam.replaceChildren(createVideoCameraSvg());
@@ -552,8 +595,7 @@ export class MobileControls {
                 e.stopPropagation();
                 this._unlockAudio();
                 this.camera.SwitchTo(opt.id);
-                this.camDrawerOpen = false;
-                camDrawer.style.display = 'none';
+                // O painel de câmeras continua aberto até um toque fora dele
                 this.syncHUD();
             };
             pill.addEventListener('touchstart', onSelect, { passive: false });
@@ -834,12 +876,21 @@ export class MobileControls {
         const checkOrientation = () => {
             if (this.isMobile && window.innerHeight > window.innerWidth) {
                 this.releaseAllInputs();
-                this.camDrawerOpen = false;
-                if (this.uiRefs.camDrawer) this.uiRefs.camDrawer.style.display = 'none';
+                this._setCamDrawerOpen(false);
             }
         };
         window.addEventListener('resize', checkOrientation);
         window.addEventListener('orientationchange', checkOrientation);
+        // Fecha o painel de câmeras com um toque/clique fora dele (o botão de câmera alterna por conta própria)
+        const closeCamDrawerOnOutsideTap = (e) => {
+            if (!this.camDrawerOpen) return;
+            const t = e.target;
+            const drawer = this.uiRefs.camDrawer;
+            const btnCam = this.uiRefs.btnCam;
+            if ((drawer && drawer.contains(t)) || (btnCam && btnCam.contains(t))) return;
+            this._setCamDrawerOpen(false);
+        };
+        window.addEventListener('pointerdown', closeCamDrawerOnOutsideTap, { capture: true, passive: true });
         // Se um dispositivo híbrido receber um toque na tela após iniciar como desktop, ativa os controles móveis
         window.addEventListener('touchstart', () => {
             if (!this.isMobile) {

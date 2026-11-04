@@ -14,12 +14,17 @@ export const VALID_ENGINE_VARIANTS = [6, 7, 1, 2, 4, 5];
 // Nível geral dos sons que não são de motor (1.0 = volume original)
 export const DEFAULT_SFX_VOLUME = 1.0;
 // Volumes individuais de cada efeito (1.0 = volume original/padrão)
-export const SFX_KINDS = ['horn', 'air', 'hitch', 'fifthWheel', 'success', 'fail', 'alert'];
+export const SFX_KINDS = ['horn', 'air', 'hitch', 'fifthWheel', 'success', 'victory', 'fail', 'alert'];
 // Som de alerta (acompanha as notificações de aviso)
 const ALERT_AUDIO_URL = new URL('./audio/alert.mp3', import.meta.url).href;
 const ALERT_MIN_INTERVAL_MS = 600;
-// Som de falha de fase (arquivo customizado); se não carregar, usa o stinger procedural antigo
-const FAIL_AUDIO_URL = new URL('./audio/fail.mp3', import.meta.url).href;
+// Sons de resultado de fase (arquivos customizados); se não carregarem, usa o stinger procedural antigo
+//  - success: passou de uma fase normal  - victory: zerou o jogo (última fase)  - fail: falhou
+const STINGER_AUDIO_URLS = {
+    fail: new URL('./audio/fail.mp3', import.meta.url).href,
+    success: new URL('./audio/stage_clear.mp3', import.meta.url).href,
+    victory: new URL('./audio/victory.mp3', import.meta.url).href
+};
 // Buzina (arquivo customizado de 3 s): ataque 0..~0.6 s, tom sustentado até ~2.05 s, cauda natural até 3 s.
 // Enquanto o botão é segurado, a região sustentada fica em loop (com crossfade); ao soltar, toca a cauda do arquivo.
 const HORN_AUDIO_URL = new URL('./audio/horn.mp3', import.meta.url).href;
@@ -1901,6 +1906,7 @@ function createW900DspCore(sampleRate) {
  *   - Sucesso ('success'): Chime Cristalino Moderno (Arpejo Luminoso Dmaj9)
  */
 export function renderOutcomeStinger(kind, sampleRate = 48000) {
+    if (kind === 'victory') kind = 'success';  // fallback procedural do zeramento = mesmo da fase normal
     const fs = Math.max(22050, Math.min(96000, Number(sampleRate) || 48000));
     const invFs = 1.0 / fs;
     const TWO_PI = Math.PI * 2.0;
@@ -2251,8 +2257,8 @@ export class W900EngineSound {
         this._stingerReqId = 0;
         this._alertBuffer = null;
         this._alertLoadPromise = null;
-        this._failBuffer = null;
-        this._failLoadPromise = null;
+        this._stingerFileBuffers = {};
+        this._stingerFilePromises = {};
         this._hornBuffer = null;
         this._hornLoadPromise = null;
         this._hornVoice = null;
@@ -2603,7 +2609,7 @@ export class W900EngineSound {
             this._ensureMasterBus();
             this._ensureSampleEngineDecoded();
             this._ensureAlertDecoded();
-            this._ensureFailDecoded();
+            Object.keys(STINGER_AUDIO_URLS).forEach((k) => this._ensureStingerFileDecoded(k));
             this._ensureHornDecoded();
             this._setupAudioGraph();
         }
@@ -3074,6 +3080,11 @@ export class W900EngineSound {
         this._playOutcomeStinger('fail');
     }
 
+    /** Som de zeramento do jogo (passou da última fase). */
+    playVictorySound() {
+        this._playOutcomeStinger('victory');
+    }
+
     playSuccessSound() {
         this._playOutcomeStinger('success');
     }
@@ -3285,27 +3296,29 @@ export class W900EngineSound {
         tail.start(now, HORN_TAIL_START_SEC);
     }
 
-    _ensureFailDecoded() {
-        if (this._failBuffer) return Promise.resolve(this._failBuffer);
-        if (this._failLoadPromise) return this._failLoadPromise;
+    _ensureStingerFileDecoded(kind) {
+        const url = STINGER_AUDIO_URLS[kind];
+        if (!url) return Promise.resolve(null);
+        if (this._stingerFileBuffers[kind]) return Promise.resolve(this._stingerFileBuffers[kind]);
+        if (this._stingerFilePromises[kind]) return this._stingerFilePromises[kind];
         if (!this.audioCtx || typeof fetch !== 'function') return Promise.resolve(null);
         const ctx = this.audioCtx;
-        this._failLoadPromise = fetch(FAIL_AUDIO_URL)
+        this._stingerFilePromises[kind] = fetch(url)
             .then((r) => {
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 return r.arrayBuffer();
             })
             .then((bytes) => ctx.decodeAudioData(bytes))
             .then((buf) => {
-                this._failBuffer = buf;
-                this._failLoadPromise = null;
+                this._stingerFileBuffers[kind] = buf;
+                this._stingerFilePromises[kind] = null;
                 return buf;
             })
             .catch(() => {
-                this._failLoadPromise = null;
+                this._stingerFilePromises[kind] = null;
                 return null;
             });
-        return this._failLoadPromise;
+        return this._stingerFilePromises[kind];
     }
 
     _getOrBuildStingerBuffer(ctx, kind) {
@@ -3371,8 +3384,8 @@ export class W900EngineSound {
         };
 
         const launch = () => {
-            if (kind === 'fail') {
-                this._ensureFailDecoded().then((buf) => launchBuffer(buf));
+            if (STINGER_AUDIO_URLS[kind]) {
+                this._ensureStingerFileDecoded(kind).then((buf) => launchBuffer(buf));
             } else {
                 launchBuffer();
             }

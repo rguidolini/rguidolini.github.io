@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TireWheelSet } from './wheel.js';
 import * as TrunkTrailerFuncs from './trunk_trailer_visual.js';
+import { bakeStaticByMaterial } from './mesh_baker.js';
 
 // Posição vertical (y) e inclinação longitudinal (pitch em X) de equilíbrio estático exato no Cannon.js 0.6.2
 // sobre o solo em y = 0.0, considerando simultaneamente o apoio dos pés dianteiros (z = +4.50 m, base local y = -2.90 m)
@@ -64,6 +65,7 @@ export class TrunkTrailer {
         const axle2 = axle1 + 1.2;
         this.chassisMesh = new THREE.Group();
         this.chassisMesh.add(new TrunkTrailerFuncs.TrunkTrailerVisual(length, axle1, axle2));
+        bakeStaticByMaterial(this.chassisMesh);  // desempenho: 1 malha por material
         const axles = [axle1, axle2];
         axles.forEach(axle => {
             ["left", "right"].forEach(side => {

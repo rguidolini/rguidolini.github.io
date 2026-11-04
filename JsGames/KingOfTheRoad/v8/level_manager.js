@@ -14,6 +14,9 @@ export class LevelManager {
         this.stopwatch = stopwatch;
         this.checkSuccessFunction = null;
         this.attempt = 1;
+        this.levelTitles = {};
+        this.run = null;                 // estatísticas da partida em andamento (fase 1 -> 6)
+        this.onGameCompleted = null;     // callback(summary) chamado ao passar da última fase
         this._localFwd = new CANNON.Vec3(0, 0, 1);
         this._worldFwd = new CANNON.Vec3();
     }
@@ -26,8 +29,14 @@ export class LevelManager {
         if (this.currentLevel > this.numLevels) {
             return false;
         }
-        if (this.currentLevel === 1) {
-             this.stopwatch.Reset();
+        // Uma "partida" começa na fase 1 e termina ao passar da última; repetir a fase 1 após falhar não zera o tempo
+        if (this.currentLevel === 1 && !(this.run && this.run.active)) {
+            this._startRun();
+        }
+        if (this.run && this.run.levelInProgress !== this.currentLevel) {
+            this.run.levelInProgress = this.currentLevel;
+            this.run.levelStartMs = this.stopwatch.getElapsedMs();
+            this.run.levelFails = 0;
         }
         this.gameEnded = false;
         this.ui.msgBox.style.display = 'none';
@@ -39,6 +48,45 @@ export class LevelManager {
         if (this.currentLevel === 5) this.setupLevel5();
         if (this.currentLevel === 6) this.setupLevel6();
         return true;
+    }
+
+    _startRun() {
+        this.stopwatch.Reset();
+        this.attempt = 1;
+        this.run = {
+            active: true,
+            levels: [],
+            crashes: { cone: 0, wall: 0, warehouse: 0, trailer: 0, other: 0 },
+            levelInProgress: null,
+            levelStartMs: 0,
+            levelFails: 0
+        };
+        if (this.truck && typeof this.truck.resetStats === 'function') this.truck.resetStats();
+    }
+
+    /** Recomeça uma partida nova a partir da fase 1 (usado pelo botão "Play again" da tela de zeramento). */
+    restartRun() {
+        if (this.run) this.run.active = false;
+        this.currentLevel = 1;
+        this.setupLevel();
+    }
+
+    _buildRunSummary() {
+        const levels = this.run.levels.slice();
+        const totalMs = levels.reduce((acc, l) => acc + l.timeMs, 0);
+        const totalAttempts = levels.reduce((acc, l) => acc + l.attempts, 0);
+        const firstTry = levels.filter((l) => l.attempts === 1).length;
+        const stats = (this.truck && this.truck.stats) ? this.truck.stats : { horns: 0, hitches: 0 };
+        return {
+            totalMs,
+            totalAttempts,
+            firstTry,
+            numLevels: this.numLevels,
+            levels,
+            crashes: { ...this.run.crashes },
+            horns: stats.horns,
+            hitches: stats.hitches
+        };
     }
 
     checkSuccess() {
@@ -230,6 +278,7 @@ export class LevelManager {
         if (this.ui.topInfoPanel) {
             this.ui.topInfoPanel.style.display = '';
         }
+        this.levelTitles[this.currentLevel] = infoTitle;
         const fullTitle = "Level " + this.currentLevel + ": " + infoTitle;
         this.ui.infoTitle.textContent = fullTitle;
         this.ui.infoDescription.textContent = infoDescription;
@@ -250,10 +299,33 @@ export class LevelManager {
         }
         this.gameEnded = true;
         this.truck.freeze();
+        const isGameCompleted = Boolean(this.run && this.run.active) &&
+            this.currentLevel === this.numLevels && typeof this.onGameCompleted === 'function';
         if (this.truck && this.truck.engineSound) {
-            this.truck.engineSound.playSuccessSound();
+            // Fase normal: stage_clear; zerou o jogo: victory
+            if (isGameCompleted && typeof this.truck.engineSound.playVictorySound === 'function') {
+                this.truck.engineSound.playVictorySound();
+            } else {
+                this.truck.engineSound.playSuccessSound();
+            }
         }
         this.stopwatch.Pause();
+
+        if (this.run && this.run.active) {
+            this.run.levels.push({
+                level: this.currentLevel,
+                title: this.levelTitles[this.currentLevel] || ("Level " + this.currentLevel),
+                timeMs: Math.max(0, this.stopwatch.getElapsedMs() - this.run.levelStartMs),
+                attempts: this.run.levelFails + 1
+            });
+            this.run.levelInProgress = null;
+            // Zerou o jogo: mostra a tela de zeramento no lugar da mensagem comum
+            if (this.currentLevel === this.numLevels && typeof this.onGameCompleted === 'function') {
+                this.run.active = false;
+                this.onGameCompleted(this._buildRunSummary());
+                return;
+            }
+        }
         this.ui.msgBox.className = 'message-box';
         this.ui.msgText.innerText = 'Congratulations!\n' + reason;
         const buttonText = nextLevel === 1 ? "Play Again" : "Start Level " + nextLevel;
@@ -268,6 +340,13 @@ export class LevelManager {
     failedLevel(reason) {
         if (this.gameEnded) return;
         this.attempt++;
+        if (this.run && this.run.active) {
+            this.run.levelFails++;
+            const r = String(reason || '').toLowerCase();
+            const kind = r.includes('cone') ? 'cone' : r.includes('wall') ? 'wall'
+                : r.includes('warehouse') ? 'warehouse' : r.includes('trailer') ? 'trailer' : 'other';
+            this.run.crashes[kind]++;
+        }
         this.gameEnded = true;
         this.truck.freeze();
         if (this.truck && this.truck.engineSound) {

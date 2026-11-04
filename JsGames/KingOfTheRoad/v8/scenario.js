@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { bakeStaticByMaterial } from './mesh_baker.js';
 
 /**
  * Cenário: pátio de um centro de distribuição/transportadora.
@@ -50,6 +51,7 @@ export class Scenario {
         dirLight.shadow.camera.far = 90;
         this.scene.add(dirLight);
 
+        const childrenBeforeScenery = new Set(this.scene.children);
         createSky(this.scene);
         createGround(this.scene, world);
         createYardMarkings(this.scene);
@@ -67,6 +69,17 @@ export class Scenario {
         createSurroundings(this.scene);
         createEntranceGate(this.scene);
         this.warehouseBody = createWarehouse(-25, 2.5, Math.PI / 2, this.scene, world);
+
+        // Desempenho: junta todo o cenário estático em uma malha por material (centenas de peças -> dezenas
+        // de chamadas de desenho). Ficam de fora: luzes, árvores instanciadas, cones e a vaga (mudam por fase).
+        const dynamic = new Set([this.parkingZone, ...this.cones.map((c) => c.mesh)]);
+        const staticRoot = new THREE.Group();
+        staticRoot.name = 'cenarioEstatico';
+        this.scene.children
+            .filter((c) => !childrenBeforeScenery.has(c) && !c.isLight && !c.isInstancedMesh && !dynamic.has(c))
+            .forEach((c) => staticRoot.attach(c));
+        this.scene.add(staticRoot);
+        this.bakeStats = bakeStaticByMaterial(staticRoot);
     }
 
     addParkingZone(sizeX, sizeZ, posX, posZ) {
@@ -154,7 +167,45 @@ export class Scenario {
     }
 
     Update(camera) {
+        this._adaptResolution();
         this.renderer.render(this.scene, camera);
+    }
+
+    /**
+     * Resolução adaptativa: se o jogo estiver abaixo de ~45 FPS por alguns segundos, reduz a densidade de
+     * pixels (ex.: 2.0 -> 1.75 -> ... -> 1.0); se ficar folgado por bastante tempo, volta a subir aos poucos.
+     */
+    _adaptResolution() {
+        const now = performance.now();
+        const a = this._adapt || (this._adapt = { last: now, acc: 0, n: 0, windowStart: now, goodSince: now });
+        const dt = now - a.last;
+        a.last = now;
+        if (dt <= 0 || dt > 250) return;      // ignora pausas (aba em segundo plano, carregamento)
+        a.acc += dt;
+        a.n++;
+        if (now - a.windowStart < 2000) return;
+        const avg = a.acc / a.n;
+        a.acc = 0;
+        a.n = 0;
+        a.windowStart = now;
+        const maxRatio = Math.min(window.devicePixelRatio || 1, 2);
+        const cur = this.renderer.getPixelRatio();
+        let next = cur;
+        if (avg > 22 && cur > 1.0) {
+            next = Math.max(1.0, cur - 0.25);
+            a.goodSince = now;
+        } else if (avg < 13) {
+            if (now - a.goodSince > 10000 && cur < maxRatio) {
+                next = Math.min(maxRatio, cur + 0.25);
+                a.goodSince = now;
+            }
+        } else {
+            a.goodSince = now;
+        }
+        if (next !== cur) {
+            this.renderer.setPixelRatio(next);
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+        }
     }
 }
 
@@ -212,6 +263,29 @@ function fillNoise(ctx, w, h, base, amp, rng, speckle = null) {
         d[i * 4 + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
+}
+
+/** Multiplica as UVs da geometria (repetição "embutida" na malha, permitindo compartilhar material). */
+function scaleUVs(geo, su, sv, groupFilter = null) {
+    const uv = geo.attributes.uv;
+    if (!uv) return geo;
+    if (!groupFilter || !geo.groups.length) {
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+    } else {
+        const idx = geo.index;
+        const done = new Set();
+        geo.groups.forEach((g) => {
+            if (!groupFilter(g.materialIndex)) return;
+            for (let k = g.start; k < g.start + g.count; k++) {
+                const v = idx ? idx.getX(k) : k;
+                if (done.has(v)) continue;
+                done.add(v);
+                uv.setXY(v, uv.getX(v) * su, uv.getY(v) * sv);
+            }
+        });
+    }
+    uv.needsUpdate = true;
+    return geo;
 }
 
 function mergeAndDispose(geos) {
@@ -577,18 +651,20 @@ function createSky(scene) {
         new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
     );
     sky.position.set(0, 0, -10);
-    sky.renderOrder = -1;
+    // Desempenho: desenhado por último entre os opacos; o teste de profundidade descarta os pixels já cobertos
+    sky.renderOrder = 2;
     scene.add(sky);
 }
 
 function createGround(scene, world) {
     // Gramado/terra ao redor (visual)
     const grass = new THREE.Mesh(
-        new THREE.PlaneGeometry(1000, 1000),
-        new THREE.MeshStandardMaterial({ map: makeGrassTexture([160, 160]), roughness: 1.0 })
+        new THREE.PlaneGeometry(700, 700),
+        cheapMaterial({ map: makeGrassTexture([112, 112]) }, 1.35)
     );
     grass.rotation.x = -Math.PI / 2;
     grass.position.y = -0.07;
+    grass.renderOrder = 1;  // depois do asfalto/cascalho que ficam por cima dele (menos pixels repintados)
     grass.receiveShadow = true;
     scene.add(grass);
 
@@ -596,7 +672,7 @@ function createGround(scene, world) {
     // (termina exatamente no acostamento da rodovia, z = 20.5, para não sobrepor o asfalto e evitar z-fighting)
     const gravel = new THREE.Mesh(
         new THREE.PlaneGeometry(76, 62.5),
-        new THREE.MeshStandardMaterial({ map: makeGravelTexture([18, 15]), roughness: 1.0 })
+        cheapMaterial({ map: makeGravelTexture([18, 15]) }, 1.5)
     );
     gravel.rotation.x = -Math.PI / 2;
     gravel.position.set(0, -0.045, -10.75);
@@ -608,7 +684,7 @@ function createGround(scene, world) {
     const yardD = YARD.maxZ - YARD.minZ;
     const asphalt = new THREE.Mesh(
         new THREE.PlaneGeometry(yardW, yardD),
-        new THREE.MeshStandardMaterial({ map: makeAsphaltTexture([yardW / 16, yardD / 16]), roughness: 0.95, metalness: 0.0 })
+        cheapMaterial({ map: makeAsphaltTexture([yardW / 16, yardD / 16]) }, 1.8)
     );
     asphalt.rotation.x = -Math.PI / 2;
     asphalt.position.set((YARD.minX + YARD.maxX) / 2, 0, (YARD.minZ + YARD.maxZ) / 2);
@@ -618,7 +694,7 @@ function createGround(scene, world) {
     // Rodovia em frente ao pátio
     const road = new THREE.Mesh(
         new THREE.PlaneGeometry(1000, 9),
-        new THREE.MeshStandardMaterial({ map: makeAsphaltTexture([1000 / 10, 1]), color: 0x8a8a8a, roughness: 0.92 })
+        cheapMaterial({ map: makeAsphaltTexture([1000 / 10, 1]), color: 0x8a8a8a }, 1.8)
     );
     road.rotation.x = -Math.PI / 2;
     road.position.set(0, -0.025, 25);
@@ -651,6 +727,17 @@ function createGround(scene, world) {
     world.addBody(groundBody);
 }
 
+/**
+ * Material Lambert (mais barato por pixel que o PBR) com brilho compensado: o Lambert não recebe a luz
+ * ambiente refletida do mapa de ambiente, então multiplicamos a cor para manter a mesma aparência do PBR.
+ */
+function cheapMaterial(params, boost) {
+    const m = new THREE.MeshLambertMaterial(params);
+    const base = params.color !== undefined ? new THREE.Color(params.color) : new THREE.Color(1, 1, 1);
+    m.color.setRGB(base.r * boost, base.g * boost, base.b * boost);
+    return m;
+}
+
 function paintMaterial(color) {
     return new THREE.MeshStandardMaterial({
         color,
@@ -675,11 +762,17 @@ function paintStripGeo(x1, z1, x2, z2, width) {
 }
 
 function createYardMarkings(scene) {
-    // Linha amarela de segurança contornando o pátio (desviando do galpão e do escritório)
+    // Linha amarela de segurança contornando o pátio (desviando do galpão e do escritório).
+    // Junto aos muros fica a 20 cm da face do muro: face em 29.9 / 14.9 / -34.9, faixa de 16 cm -> eixo a 28 cm.
     const yellow = [];
+    const W = 0.2 + 0.08;
+    const xR = YARD.maxX - 0.1 - W;
+    const xL = YARD.minX + 0.1 + W;
+    const zF = YARD.maxZ - 0.1 - W;
+    const zB = YARD.minZ + 0.1 + W;
     const path = [
-        [-18.6, 13.6], [28.6, 13.6], [28.6, -33.6], [-28.6, -33.6], [-28.6, -17.4],
-        [-21.1, -17.4], [-21.1, -8.6], [-18.6, -8.6], [-18.6, 13.6]
+        [-18.6, zF], [xR, zF], [xR, zB], [xL, zB], [xL, -17.4],
+        [-21.1, -17.4], [-21.1, -8.6], [-18.6, -8.6], [-18.6, zF]
     ];
     for (let i = 0; i < path.length - 1; i++) {
         yellow.push(paintStripGeo(path[i][0], path[i][1], path[i + 1][0], path[i + 1][1], 0.16));
@@ -697,14 +790,6 @@ function createYardMarkings(scene) {
     // Faixas brancas das docas (perpendiculares ao galpão, entre as 3 portas)
     const white = [];
     [-8, -1, 6, 13].forEach((z) => white.push(paintStripGeo(-19.9, z, -8.0, z, 0.15)));
-    // Setas de circulação
-    const arrow = (x, z, dir) => {
-        white.push(paintStripGeo(x - 1.6 * dir, z, x + 0.6 * dir, z, 0.3));
-        white.push(paintStripGeo(x + 0.6 * dir, z, x + 0.1 * dir, z + 0.45, 0.22));
-        white.push(paintStripGeo(x + 0.6 * dir, z, x + 0.1 * dir, z - 0.45, 0.22));
-    };
-    arrow(18, -27, -1);
-    arrow(-6, -27, -1);
     const whiteMesh = new THREE.Mesh(mergeAndDispose(white), paintMaterial(0xe9e9e4));
     whiteMesh.position.y = 0.004;
     whiteMesh.receiveShadow = true;
@@ -772,6 +857,15 @@ function createParkingZone(scene, sizeX, sizeZ, posX, posZ) {
 const wallPanelMaterial = new THREE.MeshStandardMaterial({ map: makeConcreteTexture(41), roughness: 0.92, metalness: 0.0 });
 const wallColumnMaterial = new THREE.MeshStandardMaterial({ map: makeConcreteTexture(43, [160, 158, 152]), roughness: 0.95, metalness: 0.0 });
 const galvanizedMaterial = new THREE.MeshStandardMaterial({ color: 0xaeb4ba, roughness: 0.45, metalness: 0.8 });
+let chainLinkMaterial = null;
+function getChainLinkMaterial() {
+    if (!chainLinkMaterial) {
+        chainLinkMaterial = new THREE.MeshStandardMaterial({
+            map: makeChainLinkTexture([1, 1]), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.7, color: 0xd5dade
+        });
+    }
+    return chainLinkMaterial;
+}
 
 function createBoundaryWall(x, z, length, isXAligned, scene, world, gap = null) {
     const wallHeight = 1;
@@ -847,12 +941,9 @@ function createBoundaryWall(x, z, length, isXAligned, scene, world, gap = null) 
         rail.translate((a + b) / 2, size.y / 2 + fenceH, 0);
         postGeos.push(rail);
 
-        const meshTex = makeChainLinkTexture([segLen / 0.5, fenceH / 0.5]);
         const fence = new THREE.Mesh(
-            new THREE.PlaneGeometry(segLen, fenceH),
-            new THREE.MeshStandardMaterial({
-                map: meshTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.7, color: 0xd5dade
-            })
+            scaleUVs(new THREE.PlaneGeometry(segLen, fenceH), segLen / 0.5, fenceH / 0.5),
+            getChainLinkMaterial()
         );
         fence.position.set((a + b) / 2, size.y / 2 + fenceH / 2, 0);
         fence.castShadow = true;
@@ -1025,7 +1116,7 @@ function createEntranceGate(scene) {
     const driveLen = 20.55 - z;
     const drive = new THREE.Mesh(
         new THREE.PlaneGeometry(width + 2, driveLen),
-        new THREE.MeshStandardMaterial({ map: makeAsphaltTexture([(width + 2) / 12, driveLen / 12]), roughness: 0.95 })
+        cheapMaterial({ map: makeAsphaltTexture([(width + 2) / 12, driveLen / 12]) }, 1.8)
     );
     drive.rotation.x = -Math.PI / 2;
     drive.position.set((start + end) / 2, -0.012, z + driveLen / 2);
@@ -1233,9 +1324,9 @@ function createTrees(scene) {
     const crossGeo = mergeAndDispose([plane1, plane2]);
 
     const variants = [
-        new THREE.MeshStandardMaterial({ map: makeTreeSprite(501), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0 }),
-        new THREE.MeshStandardMaterial({ map: makeTreeSprite(502), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0 }),
-        new THREE.MeshStandardMaterial({ map: makeTreeSprite(503, true), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0 })
+        cheapMaterial({ map: makeTreeSprite(501), alphaTest: 0.5, side: THREE.DoubleSide }, 1.3),
+        cheapMaterial({ map: makeTreeSprite(502), alphaTest: 0.5, side: THREE.DoubleSide }, 1.3),
+        cheapMaterial({ map: makeTreeSprite(503, true), alphaTest: 0.5, side: THREE.DoubleSide }, 1.3)
     ];
     const perVariant = 160;
     const dummy = new THREE.Object3D();
@@ -1270,6 +1361,19 @@ function createTrees(scene) {
     });
 }
 
+const DISTANT_TONES = [[205, 210, 214], [185, 192, 198], [214, 206, 190]];
+const distantBuildingMaterials = {};
+function getDistantBuildingMaterials(tone) {
+    if (!distantBuildingMaterials[tone]) {
+        const { map, bump } = makeCorrugatedTextures(DISTANT_TONES[tone], [1, 1], 300 + tone);
+        distantBuildingMaterials[tone] = {
+            wall: new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.4, roughness: 0.7, metalness: 0.3 }),
+            roof: new THREE.MeshStandardMaterial({ color: 0x7c848c, roughness: 0.85 })
+        };
+    }
+    return distantBuildingMaterials[tone];
+}
+
 function createDistantBuildings(scene) {
     const rng = makeRng(101);
     const specs = [
@@ -1284,15 +1388,13 @@ function createDistantBuildings(scene) {
         let z = z0;
         const minGap = radius + ROAD_HALF + 6;
         if (Math.abs(z - ROAD_Z) < minGap) z = z < ROAD_Z ? ROAD_Z - minGap : ROAD_Z + minGap;
-        const tones = [[205, 210, 214], [185, 192, 198], [214, 206, 190]];
-        const { map, bump } = makeCorrugatedTextures(tones[i % tones.length], [w / 1.2, 1], 300 + i);
-        const sideTex = map.clone();
-        sideTex.repeat.set(d / 1.2, 1);
-        sideTex.needsUpdate = true;
-        const front = new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.4, roughness: 0.7, metalness: 0.3 });
-        const side = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.7, metalness: 0.3 });
-        const roof = new THREE.MeshStandardMaterial({ color: 0x7c848c, roughness: 0.85 });
-        const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [side, side, roof, roof, front, front]);
+        const tone = i % DISTANT_TONES.length;
+        const mats = getDistantBuildingMaterials(tone);
+        const geo = new THREE.BoxGeometry(w, h, d);
+        // grupos da BoxGeometry: 0/1 = laterais (+x/-x), 2/3 = topo/base, 4/5 = frente/fundo
+        scaleUVs(geo, d / 1.2, 1, (mi) => mi === 0 || mi === 1);
+        scaleUVs(geo, w / 1.2, 1, (mi) => mi === 4 || mi === 5);
+        const b = new THREE.Mesh(geo, [mats.wall, mats.wall, mats.roof, mats.roof, mats.wall, mats.wall]);
         b.position.set(x, h / 2, z);
         b.rotation.y = Math.atan2(-x, -z) + (rng() - 0.5) * 0.3;
         scene.add(b);

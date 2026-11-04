@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { bakeStaticByMaterial } from './mesh_baker.js';
 
 // Cache de geometrias e materiais para evitar recriação nas 18 rodas da cena
 let cachedSingleWheel = null;
@@ -53,6 +54,8 @@ export class TireWheelSet {
         if (single) {
             if (!cachedSingleWheel) {
                 cachedSingleWheel = this.CreateSet(true, tireMaterial);
+                // Desempenho: 1 malha por material em vez de ~14 peças por roda
+                bakeStaticByMaterial(cachedSingleWheel);
             }
             this.visual.add(cachedSingleWheel.clone());
         } else {
@@ -65,6 +68,7 @@ export class TireWheelSet {
                 inner.position.y = -this.tireWidth;
                 doubleGroup.add(outer);
                 doubleGroup.add(inner);
+                bakeStaticByMaterial(doubleGroup);
                 cachedDoubleWheel = doubleGroup;
             }
             this.visual.add(cachedDoubleWheel.clone());

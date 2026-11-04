@@ -23,7 +23,11 @@ export class Stopwatch {
 
     Reset() {
         clearInterval(this.intervalId);
+        this.intervalId = null;
         this.elapsedTime = 0;
+        if (this.element) {
+            this.element.innerText = this._formatTime(0);
+        }
     }
 
     Start() {
@@ -33,7 +37,19 @@ export class Stopwatch {
     }
 
     Pause() {
+        if (this.intervalId) {
+            this._update();  // acumula o trecho desde o último tick antes de pausar
+        }
         clearInterval(this.intervalId);
+        this.intervalId = null;
+    }
+
+    /** Tempo decorrido em ms (inclui o trecho em andamento, se estiver rodando). */
+    getElapsedMs() {
+        if (this.intervalId && this.startTime) {
+            return this.elapsedTime + (Date.now() - this.startTime);
+        }
+        return this.elapsedTime;
     }
 
     getFormattedElapsedTime() {
