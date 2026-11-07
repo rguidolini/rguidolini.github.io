@@ -2,6 +2,57 @@ import * as THREE from 'three';
 import { TireWheelSet } from './wheel.js';
 import { KenworthW900Visual } from './kenworth_w900_visual.js';
 import { W900EngineSound, ENGINE_STARTUP_DURATION } from './engine_sound.js';
+import { TRUCK_MASS_KG, MASS_SCALE, PARKING_BRAKE_IMPULSE } from './trunk_trailer.js';
+
+/**
+ * Mensagens de assistência: dizem o que fazer e COMO fazer, com o controle da plataforma atual
+ * (teclado no desktop, botões de toque no mobile).
+ */
+const HINTS = {
+    engineOff: {
+        desktop: "⚠ Engine is off — press E to start it",
+        mobile: "⚠ Engine is off — tap START/STOP to start it"
+    },
+    parkingBrakeDrive: {
+        desktop: "⚠ Parking brake is on — press Space to release it",
+        mobile: "⚠ Parking brake is on — tap (P) to release it"
+    },
+    hitchWhileMovingBrakeOn: {
+        desktop: "⚠ Cannot (un)hitch while moving — wait for the truck to stop, then press T",
+        mobile: "⚠ Cannot (un)hitch while moving — wait for the truck to stop, then tap the trailer button"
+    },
+    hitchWhileMoving: {
+        desktop: "⚠ To (un)hitch: stop the truck (brake with ↓ or ↑), press Space to lock the parking brake, then press T",
+        mobile: "⚠ To (un)hitch: stop the truck (brake with REV or GO), tap (P) to lock the parking brake, then tap the trailer button"
+    },
+    hitchNeedsBrake: {
+        desktop: "⚠ Press Space to lock the parking brake, then press T to (un)hitch",
+        mobile: "⚠ Tap (P) to lock the parking brake, then tap the trailer button to (un)hitch"
+    },
+    fifthWheelNotEngaged: {
+        desktop: "⚠ Not aligned: back up slowly under the trailer until the fifth wheel locks on the kingpin (clunk!), then press T",
+        mobile: "⚠ Not aligned: back up slowly under the trailer until the fifth wheel locks on the kingpin (clunk!), then tap the trailer button"
+    },
+    finishBoth: {
+        desktop: "🅿 To finish: press Space to lock the parking brake and E to turn off the engine",
+        mobile: "🅿 To finish: tap (P) to lock the parking brake and START/STOP to turn off the engine"
+    },
+    finishBrake: {
+        desktop: "🅿 To finish: press Space to lock the parking brake",
+        mobile: "🅿 To finish: tap (P) to lock the parking brake"
+    },
+    finishEngine: {
+        desktop: "🔌 To finish: press E to turn off the engine",
+        mobile: "🔌 To finish: tap START/STOP to turn off the engine"
+    }
+};
+
+export function controlHint(key) {
+    const h = HINTS[key];
+    if (!h) return '';
+    const isMobile = typeof document !== 'undefined' && document.body && document.body.classList.contains('is-mobile');
+    return isMobile ? h.mobile : h.desktop;
+}
 
 export class KenworthW900 {
     Initialize(params) {
@@ -33,7 +84,7 @@ export class KenworthW900 {
 
         // 1. Física do Veículo
         const chassisBody = new CANNON.Body({
-            mass: 3000,
+            mass: TRUCK_MASS_KG,
             material: params.fifthWheelMaterial,
         });
 
@@ -43,9 +94,13 @@ export class KenworthW900 {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, length / 2));
         chassisBody.addShape(chassisShape);
 
-        const cabWidth = width;
-        const cabLength = 5;
-        const cabHeight = 2.38;
+        // Caixa de colisão da cabine + sleeper + defletores traseiros, medida no modelo 3D:
+        // só a lataria vermelha conta: traseira dos defletores vermelhos em z = -1.13 m (a borracha preta atrás
+        // deles, até -1.17 m, é ignorada), largura ±1.20 m, topo do sleeper ~2.75 m
+        const cabWidth = 2.40;
+        const cabRearZ = -1.13;
+        const cabLength = length / 2 - cabRearZ;  // de z = -1.13 até o para-choque (+3.95)
+        const cabHeight = 2.50;
         const cabY = cabHeight / 2 + height / 2;
         const cabZ = length / 2 - cabLength / 2;
         const cabShape = new CANNON.Box(new CANNON.Vec3(cabWidth / 2, cabHeight / 2, cabLength / 2));
@@ -81,7 +136,9 @@ export class KenworthW900 {
         this.params.scene.add(this.chassisMesh);
         this.wheelMeshes.forEach(mesh => { this.params.scene.add(mesh) });
 
-        this.fifthWheelPoint = new CANNON.Vec3(0, height / 2 + 0.25, -length / 2 + 0.7 + 0.38);
+        // Ponto de engate na superfície da placa da quinta roda (topo visual medido: y ≈ 0.462 no frame do cavalo),
+        // para o assoalho do chassi da carreta (onde fica o pino rei) apoiar na placa sem folga.
+        this.fifthWheelPoint = new CANNON.Vec3(0, height / 2 + 0.212, -length / 2 + 0.7 + 0.38);
         const fifthWheelY = height / 2 + 0.18;
         const fifthWheelBack = new CANNON.Box(new CANNON.Vec3(0.20 / 2, 0.1 / 2, 0.1 / 2));
         chassisBody.addShape(fifthWheelBack, new CANNON.Vec3(0, fifthWheelY, -length / 2 + 1.23));
@@ -204,7 +261,7 @@ export class KenworthW900 {
             }
             this._applyCoastDrag(false);
             if (powerFraction !== 0) {
-                this.showWarning("⚠ Start the engine to drive", { group: 'engine-off-warn' });
+                this.showWarning(controlHint('engineOff'), { group: 'engine-off-warn' });
             }
             return;
         }
@@ -223,12 +280,12 @@ export class KenworthW900 {
         this.setReverseLights(this.reverseThrottle || this.isMoving() < 0);
         if (powerFraction != 0) {
             if (this.parkingBrakeOn) {
-                this.showWarning("⚠ Release the parking brake to drive", { group: 'parking-brake' });
+                this.showWarning(controlHint('parkingBrakeDrive'), { group: 'parking-brake' });
             }
             this.vehicle.chassisBody.allowSleep = false;
             this.vehicle.chassisBody.wakeUp();
         }
-        const maxForce = -2000;  // The negative values is because the car was crated in the wrong axis
+        const maxForce = -2000 * MASS_SCALE;  // The negative values is because the car was crated in the wrong axis
         let force = maxForce * powerFraction;
         if (powerFraction < 0) {
             force /= 2;
@@ -259,13 +316,13 @@ export class KenworthW900 {
         const fade = Math.min(1.0, speedMs / 2.5);  // freio-motor some suavemente abaixo de ~9 km/h
         const decel = ROLLING_DECEL + (engineBraking ? ENGINE_BRAKE_DECEL * fade : 0.0);
 
-        const TRUCK_MASS = this.vehicle.chassisBody.mass;
-        const TRAILER_MASS = 3000;
-        const totalMass = TRUCK_MASS + (this.HasTrailer() ? TRAILER_MASS : 0);
+        const truckMass = this.vehicle.chassisBody.mass;
+        const trailerMass = this.HasTrailer() ? this.trailer.vehicle.chassisBody.mass : 0;
+        const totalMass = truckMass + trailerMass;
         const PHYSICS_HZ = 60;
         const impulsePerWheel = (totalMass * decel) / (PHYSICS_HZ * 4);
 
-        const parkingForce = this.parkingBrakeOn ? 50 : 0;
+        const parkingForce = this.parkingBrakeOn ? PARKING_BRAKE_IMPULSE : 0;
         for (let i = 2; i < 6; i++) {
             this.vehicle.setBrake(Math.max(parkingForce, impulsePerWheel), i);
         }
@@ -387,9 +444,9 @@ export class KenworthW900 {
         if (breakFraction !== 0) {
             this.vehicle.chassisBody.allowSleep = true;
         }
-        const maxBrakeForce = 60;
+        const maxBrakeForce = 60 * MASS_SCALE;
         const serviceBrakeForce = maxBrakeForce * breakFraction;
-        const parkingForce = this.parkingBrakeOn ? 50 : 0;
+        const parkingForce = this.parkingBrakeOn ? PARKING_BRAKE_IMPULSE : 0;
         for (let i = 0; i < this.vehicle.wheelInfos.length; i++) {
             const force = (i >= 2) ? Math.max(serviceBrakeForce, parkingForce) : serviceBrakeForce;
             this.vehicle.setBrake(force, i);
@@ -403,7 +460,7 @@ export class KenworthW900 {
         if (changed && wasInitialized && !this._suppressBrakeHiss && this.engineSound) {
             this.engineSound.triggerAirBrakeHiss(isOn ? 0.85 : 1.0);
         }
-        const maxParkingBrakeForce = 50;
+        const maxParkingBrakeForce = PARKING_BRAKE_IMPULSE;
         const force = isOn ? maxParkingBrakeForce : 0;
         if (isOn) {
             this.vehicle.chassisBody.allowSleep = true;
@@ -651,7 +708,7 @@ export class KenworthW900 {
             frictionSlip: 1.4,
             dampingRelaxation: 2.3,
             dampingCompression: 4.4,
-            maxSuspensionForce: 100000,
+            maxSuspensionForce: 100000 * MASS_SCALE,
             rollInfluence: 0.01,
             axleLocal: new CANNON.Vec3(-1, 0, 0),
             chassisConnectionPointLocal: new CANNON.Vec3(),
@@ -701,6 +758,31 @@ export class KenworthW900 {
         }
     }
 
+    /**
+     * Suspensão a ar com válvula niveladora nos eixos traseiros (como a Airglide do W900): quando a carreta
+     * apoia na quinta roda, as bolsas enchem e devolvem a traseira à altura de rodagem em ~1 s, em vez de
+     * ficar arriada. Implementado ajustando aos poucos o comprimento de repouso das molas traseiras.
+     * @param {number} deltaTime: segundos desde o último quadro.
+     */
+    _updateAirSuspension(deltaTime) {
+        const REAR_RIDE_LENGTH = 0.258;   // m: compressão das molas traseiras com o cavalo sozinho (medido)
+        const REST_MIN = 0.30, REST_MAX = 0.40;
+        const LEVELING_TIME = 0.6;        // s: constante de tempo da válvula niveladora
+        const dt = Math.min(0.05, Math.max(0.0, deltaTime || 1 / 60));
+        const wheels = this.vehicle.wheelInfos;
+        let sum = 0, n = 0;
+        for (let i = 2; i < wheels.length; i++) {
+            if (wheels[i].isInContact) { sum += wheels[i].suspensionLength; n++; }
+        }
+        if (n === 0) return;
+        const error = REAR_RIDE_LENGTH - sum / n;
+        const rest = wheels[2].suspensionRestLength;
+        const next = Math.min(REST_MAX, Math.max(REST_MIN, rest + error * dt / LEVELING_TIME));
+        if (Math.abs(next - rest) < 1e-5) return;
+        for (let i = 2; i < wheels.length; i++) wheels[i].suspensionRestLength = next;
+        if (Math.abs(error) > 0.004) this.vehicle.chassisBody.wakeUp();  // segue nivelando mesmo parado
+    }
+
     reset(x, y, z, angle) {
         this.frozen = false;
         this.setHorn(false);
@@ -716,6 +798,7 @@ export class KenworthW900 {
             this.vehicle.applyEngineForce(0, i);
             this.vehicle.setBrake(0, i);
             this.vehicle.wheelInfos[i].deltaRotation = 0;
+            this.vehicle.wheelInfos[i].suspensionRestLength = 0.3;
         }
         this.vehicle.chassisBody.type = CANNON.Body.DYNAMIC;
         this._suppressBrakeHiss = true;
@@ -739,8 +822,8 @@ export class KenworthW900 {
         const moving = this.isMoving() !== 0 || Math.abs(this.GetSpeed()) > 0.08;
         if (moving) {
             const msg = this.parkingBrakeOn
-                ? "⚠ Cannot (un)hitch while moving"
-                : "⚠ Stop the truck and lock the parking brake to (un)hitch";
+                ? controlHint('hitchWhileMovingBrakeOn')
+                : controlHint('hitchWhileMoving');
             this.showWarning(msg, {
                 group: 'trailer-moving',
                 invalidates: ['trailer-error', 'trailer-park-brake']
@@ -748,7 +831,7 @@ export class KenworthW900 {
             return;
         }
         if (!this.parkingBrakeOn) {
-            this.showWarning("⚠ Lock the parking brake to (un)hitch the trailer", {
+            this.showWarning(controlHint('hitchNeedsBrake'), {
                 group: 'trailer-park-brake',
                 invalidates: ['trailer-error', 'trailer-moving']
             });
@@ -769,7 +852,7 @@ export class KenworthW900 {
         this.vehicle.chassisBody.pointToWorldFrame(this.fifthWheelPoint, fifthWheelPosition);
         const distance = fifthWheelPosition.distanceTo(trailer.GetkingPinWorldPosition());
         if (distance > 0.2) {
-            this.showWarning("⚠ Failed to hitch: Fifth wheel not engaged", {
+            this.showWarning(controlHint('fifthWheelNotEngaged'), {
                 group: 'trailer-error',
                 invalidates: ['trailer-moving', 'trailer-park-brake']
             });
@@ -825,6 +908,7 @@ export class KenworthW900 {
                 this._crankTimer = Math.max(0.0, this._crankTimer - dtClamped);
             }
         }
+        this._updateAirSuspension(deltaTime);
         this.chassisMesh.position.copy(this.vehicle.chassisBody.position);
         this.chassisMesh.quaternion.copy(this.vehicle.chassisBody.quaternion);
         for (let i = 0; i < this.wheelMeshes.length; i++) {

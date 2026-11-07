@@ -13,6 +13,8 @@ export const DEFAULT_ENGINE_VARIANT = 6;
 export const VALID_ENGINE_VARIANTS = [6, 7, 1, 2, 4, 5];
 // Nível geral dos sons que não são de motor (1.0 = volume original)
 export const DEFAULT_SFX_VOLUME = 1.0;
+// Volume geral do jogo (canal master por onde passam TODOS os sons: motores, efeitos, buzina, alertas e stingers)
+export const MASTER_VOLUME = 0.75;
 // Volumes individuais de cada efeito (1.0 = volume original/padrão)
 export const SFX_KINDS = ['horn', 'air', 'hitch', 'fifthWheel', 'success', 'victory', 'fail', 'alert'];
 // Som de alerta (acompanha as notificações de aviso)
@@ -2592,7 +2594,8 @@ export class W900EngineSound {
         if (!this.audioCtx) return null;
         if (!this.masterBus) {
             const bus = this.audioCtx.createGain();
-            bus.gain.setValueAtTime(this.muted ? 0.0 : 1.0, this.audioCtx.currentTime);
+            bus.gain.value = this.muted ? 0.0 : MASTER_VOLUME;
+            bus.gain.setValueAtTime(this.muted ? 0.0 : MASTER_VOLUME, this.audioCtx.currentTime);
             bus.connect(this.audioCtx.destination);
             this.masterBus = bus;
         }
@@ -3419,7 +3422,7 @@ export class W900EngineSound {
                 const now = this.audioCtx.currentTime;
                 bus.gain.cancelScheduledValues(now);
                 bus.gain.setValueAtTime(bus.gain.value, now);
-                bus.gain.setTargetAtTime(next ? 0.0 : 1.0, now, next ? 0.006 : 0.008);
+                bus.gain.setTargetAtTime(next ? 0.0 : MASTER_VOLUME, now, next ? 0.006 : 0.008);
             }
         }
         if (next) {

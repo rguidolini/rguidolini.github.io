@@ -1,4 +1,5 @@
 import { TRAILER_REST_Y } from './trunk_trailer.js';
+import { controlHint } from './kenworth_w900.js';
 
 export class LevelManager {
     constructor(uiElements, camera, truck, trunk_trailer, keyboardController, scenario, stopwatch) {
@@ -40,7 +41,12 @@ export class LevelManager {
         }
         this.gameEnded = false;
         this.ui.msgBox.style.display = 'none';
-        this.stopwatch.Start();
+        // No início da partida (fase 1), o cronômetro só começa quando o jogador liga o motor ou solta o freio de mão
+        if (this.run && this.run.waitingForFirstAction) {
+            this.stopwatch.Pause();
+        } else {
+            this.stopwatch.Start();
+        }
         if (this.currentLevel === 1) this.setupLevel1();
         if (this.currentLevel === 2) this.setupLevel2();
         if (this.currentLevel === 3) this.setupLevel3();
@@ -59,7 +65,8 @@ export class LevelManager {
             crashes: { cone: 0, wall: 0, warehouse: 0, trailer: 0, other: 0 },
             levelInProgress: null,
             levelStartMs: 0,
-            levelFails: 0
+            levelFails: 0,
+            waitingForFirstAction: true
         };
         if (this.truck && typeof this.truck.resetStats === 'function') this.truck.resetStats();
     }
@@ -90,6 +97,14 @@ export class LevelManager {
     }
 
     checkSuccess() {
+        if (this.run && this.run.waitingForFirstAction && !this.gameEnded) {
+            const engineOn = typeof this.truck.isEngineOn === 'function' && this.truck.isEngineOn();
+            const brakeReleased = this.keyboardController && this.keyboardController.parkingBrakeOn === false;
+            if (engineOn || brakeReleased) {
+                this.run.waitingForFirstAction = false;
+                this.stopwatch.Start();
+            }
+        }
         return this.checkSuccessFunction();
     }
 
@@ -132,11 +147,11 @@ export class LevelManager {
         }
 
         if (!brakeLocked && !engineOff) {
-            this.truck.showinfo("🅿 Lock parking brake & turn off engine to finish", { group: 'park-finish-hint' });
+            this.truck.showinfo(controlHint('finishBoth'), { group: 'park-finish-hint' });
         } else if (!brakeLocked) {
-            this.truck.showinfo("🅿 Lock the parking brake to finish", { group: 'park-finish-hint' });
+            this.truck.showinfo(controlHint('finishBrake'), { group: 'park-finish-hint' });
         } else {
-            this.truck.showinfo("🔌 Turn off the engine to finish", { group: 'park-finish-hint' });
+            this.truck.showinfo(controlHint('finishEngine'), { group: 'park-finish-hint' });
         }
     }
 

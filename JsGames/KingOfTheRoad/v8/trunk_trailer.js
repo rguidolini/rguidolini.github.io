@@ -3,9 +3,18 @@ import { TireWheelSet } from './wheel.js';
 import * as TrunkTrailerFuncs from './trunk_trailer_visual.js';
 import { bakeStaticByMaterial } from './mesh_baker.js';
 
+// Massas (kg). Forças de motor/freio e limite da suspensão foram calibradas com 3 t e são escaladas por
+// MASS_SCALE para manter a mesma dirigibilidade (aceleração, frenagem e desaceleração) com o peso real.
+export const TRUCK_MASS_KG = 8000;
+export const TRAILER_MASS_KG = 8000;
+export const MASS_SCALE = TRUCK_MASS_KG / 3000;
+// Freio de estacionamento: impulso máximo por roda por passo de física (N·s).
+export const PARKING_BRAKE_IMPULSE = 50 * MASS_SCALE;
+
 // Posição vertical (y) e inclinação longitudinal (pitch em X) de equilíbrio estático exato no Cannon.js 0.6.2
 // sobre o solo em y = 0.0, considerando simultaneamente o apoio dos pés dianteiros (z = +4.50 m, base local y = -2.90 m)
-// e a compressão das 4 molas da suspensão traseira (z = -6.00 m e -4.80 m, k = 90 kN/m por roda para massa = 3000 kg).
+// e a compressão das 4 molas da suspensão traseira (z = -6.00 m e -4.80 m, k = 30 × massa do chassi por roda: no RaycastVehicle a força da mola escala com a massa,
+// então este equilíbrio não depende da massa — conferido com 3 t e 8 t).
 export const TRAILER_REST_Y = 2.8470685;
 export const TRAILER_REST_PITCH = -0.01184814;
 
@@ -25,7 +34,7 @@ export class TrunkTrailer {
         const height = 3;
 
         const chassisBody = new CANNON.Body({
-            mass: 3000,
+            mass: TRAILER_MASS_KG,
             linearDamping: 0.05,
             material: params.kingPinMaterial,
         });
@@ -85,6 +94,10 @@ export class TrunkTrailer {
         const quaternion = new CANNON.Quaternion();
         quaternion.setFromAxisAngle(axis, Math.PI / 2);
         chassisBody.addShape(kingPin, new CANNON.Vec3(0, kingY, kingZ), quaternion);
+
+        // Unidade de refrigeração na frente do baú (medida no modelo 3D: z 7.50..7.95, ±0.79 m, y -0.72..1.48)
+        const reeferShape = new CANNON.Box(new CANNON.Vec3(0.79, 1.10, 0.225));
+        chassisBody.addShape(reeferShape, new CANNON.Vec3(0, 0.38, length / 2 + 0.225));
     }
 
     addToScene(scene) {
@@ -110,7 +123,7 @@ export class TrunkTrailer {
             frictionSlip: 1.4,
             dampingRelaxation: 2.3,
             dampingCompression: 4.4,
-            maxSuspensionForce: 100000,
+            maxSuspensionForce: 100000 * MASS_SCALE,
             rollInfluence: 0.01,
             maxSuspensionTravel: 0.3,
             // This causes the wheels of the truck to slide strange when the car has a truck axle.
@@ -201,7 +214,7 @@ export class TrunkTrailer {
     }
 
     setParkingBrake(isOn) {
-        const parkingBrakeForce = 50;
+        const parkingBrakeForce = PARKING_BRAKE_IMPULSE;
         const force = isOn ? parkingBrakeForce : 0;
         for (let i = 0; i < this.wheelMeshes.length; i++) {
             this.vehicle.setBrake(force, i);
