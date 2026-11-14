@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SPEED_BUMP_DEFAULTS, SPEED_BUMP_ENABLED_BY_DEFAULT } from './scenario.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -239,9 +240,9 @@ export function KenworthW900Visual(wheelMeshes = [], options = {}) {
     }
 
     // Controle dinâmico de iluminação em ciclo de 3 estados (tecla 'L'):
-    //   0 = Apagado -> 1 = Luzes de Posição -> 2 = Faróis -> 0 = Apagado
+    //   0 = Apagado -> 1 = Luzes de Posição -> 2 = Farol Baixo -> 3 = Farol Alto -> 0 = Apagado
     // E controle dos faroletes de freio traseiros (acendem fraco nas luzes de posição e forte ao frear)
-    let lightingState = 0; // 0: apagado, 1: luzes de posição, 2: faróis
+    let lightingState = 0; // 0: apagado, 1: luzes de posição, 2: farol baixo, 3: farol alto
     let brakeLightsOn = false;
 
     const updateTailLightsMaterial = () => {
@@ -289,7 +290,7 @@ export function KenworthW900Visual(wheelMeshes = [], options = {}) {
     };
 
     const setLightingState = (nextState) => {
-        const normalized = ((Number(nextState) % 3) + 3) % 3;
+        const normalized = ((Number(nextState) % 4) + 4) % 4;
         lightingState = normalized;
 
         // 1. Luzes de posição (verdes): teto do núcleo, saia lateral cromada, faróis externos dos paralamas e lanternas traseiras fracas
@@ -309,7 +310,8 @@ export function KenworthW900Visual(wheelMeshes = [], options = {}) {
             if (positionOn) {
                 mats.outerHeadlightLens.color.setHex(0xffffff);
                 mats.outerHeadlightLens.emissive.setHex(0xfff2cc);
-                mats.outerHeadlightLens.emissiveIntensity = lightingState === 2 ? 2.8 : 2.4;
+                // Posição: só um brilho fraco (funciona como luz de posição); farol baixo/alto: aceso forte
+                mats.outerHeadlightLens.emissiveIntensity = lightingState === 3 ? 2.8 : (lightingState === 2 ? 2.4 : 0.55);
             } else {
                 mats.outerHeadlightLens.color.setHex(0xeef4fa);
                 mats.outerHeadlightLens.emissive.setHex(0x000000);
@@ -317,8 +319,8 @@ export function KenworthW900Visual(wheelMeshes = [], options = {}) {
             }
         }
 
-        // 2. Faróis principais e de milha no para-choque (rosa): acendem forte apenas no estado 2 (faróis)
-        const highHeadlightsOn = lightingState === 2;
+        // 2. Faróis principais e de milha no para-choque: acendem forte apenas no farol alto (estado 3)
+        const highHeadlightsOn = lightingState === 3;
         if (mats.headlightLens) {
             if (highHeadlightsOn) {
                 mats.headlightLens.color.setHex(0xffffff);
@@ -342,10 +344,10 @@ export function KenworthW900Visual(wheelMeshes = [], options = {}) {
         if (typeof stateOrBool === 'number') {
             return setLightingState(stateOrBool);
         }
-        return setLightingState(stateOrBool ? 2 : 0);
+        return setLightingState(stateOrBool ? 3 : 0);
     };
     masterGroup.userData.toggleHeadlights = () => {
-        return setLightingState((lightingState + 1) % 3);
+        return setLightingState((lightingState + 1) % 4);
     };
 
     return masterGroup;
@@ -3804,6 +3806,12 @@ function applySingleCabinPartTransform(targetGroup, cur, def) {
     );
 }
 
+// Ganchos do painel da tecla C para o jogo (lombada e seletor de fases), registrados pela página
+const devPanelHooks = { setSpeedBump: null, setSpeedBumpEnabled: null, jumpToLevel: null, numLevels: 6, getLevelTitle: null };
+export function registerDevPanelHooks(hooks) {
+    Object.assign(devPanelHooks, hooks || {});
+}
+
 function mountStructureVisibilityUI({
     othersGroup,
     bakedFenderShell,
@@ -3833,10 +3841,15 @@ function mountStructureVisibilityUI({
         chapaPassadico: { ...DEFAULT_CABIN_ELEMENTS_PARAMS.chapaPassadico },
         capo: { ...DEFAULT_CABIN_ELEMENTS_PARAMS.capo },
         nucleo: { ...DEFAULT_CABIN_ELEMENTS_PARAMS.nucleo },
-        sleeper: { ...DEFAULT_CABIN_ELEMENTS_PARAMS.sleeper }
+        sleeper: { ...DEFAULT_CABIN_ELEMENTS_PARAMS.sleeper },
+        lombada: { ...SPEED_BUMP_DEFAULTS }
     };
+    const partDefaults = (id) => (id === 'lombada' ? SPEED_BUMP_DEFAULTS : DEFAULT_CABIN_ELEMENTS_PARAMS[id]);
 
     const updateCabinTransforms = (changedPartId) => {
+        if ((changedPartId === 'lombada' || changedPartId === 'all') && typeof devPanelHooks.setSpeedBump === 'function') {
+            devPanelHooks.setSpeedBump({ ...cabinParams.lombada });
+        }
         if ((changedPartId === 'nucleo' || changedPartId === 'all') && typeof rebuildNucleo === 'function') {
             rebuildNucleo(DEFAULT_CABIN_ELEMENTS_PARAMS.janelaMotorista, cabinParams.nucleo);
         }
@@ -3997,7 +4010,114 @@ function mountStructureVisibilityUI({
 
     refreshSoundButtons();
     soundSection.appendChild(soundBtnGrid);
+
+    // Seletor de fases (com penalidade de tempo: a fase N começa no minuto N × 10)
+    const levelSection = document.createElement('div');
+    Object.assign(levelSection.style, {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        paddingBottom: '8px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.14)'
+    });
+    const levelHeader = document.createElement('div');
+    levelHeader.textContent = '🎯 Ir para a fase';
+    Object.assign(levelHeader.style, { fontWeight: '700', fontSize: '12px', color: '#f9fafb' });
+    levelSection.appendChild(levelHeader);
+    const levelNote = document.createElement('div');
+    levelNote.textContent = 'Penalidade: a fase N começa no minuto N × 10 (o tempo nunca diminui) e a partida não vale recorde.';
+    Object.assign(levelNote.style, { fontSize: '10.5px', color: '#fcd34d', lineHeight: '1.35' });
+    levelSection.appendChild(levelNote);
+    const levelGrid = document.createElement('div');
+    Object.assign(levelGrid.style, {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+        gap: '5px'
+    });
+    const numLevels = Math.max(1, Math.min(12, Number(devPanelHooks.numLevels) || 6));
+    for (let n = 1; n <= numLevels; n++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = String(n);
+        Object.assign(btn.style, {
+            padding: '6px 0',
+            borderRadius: '6px',
+            border: '1px solid rgba(255, 255, 255, 0.24)',
+            backgroundColor: '#1f2937',
+            color: '#e5e7eb',
+            fontWeight: '700',
+            fontSize: '12px',
+            cursor: 'pointer'
+        });
+        btn.addEventListener('mouseenter', () => {
+            const title = typeof devPanelHooks.getLevelTitle === 'function' ? devPanelHooks.getLevelTitle(n) : '';
+            btn.title = `Fase ${n}${title ? ': ' + title : ''} — começa em ${n * 10}:00`;
+        });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            btn.blur();
+            if (typeof devPanelHooks.jumpToLevel === 'function') devPanelHooks.jumpToLevel(n);
+        });
+        levelGrid.appendChild(btn);
+    }
+    levelSection.appendChild(levelGrid);
+    // Cabeçalho com título; arrastar por ele move o painel
+    const panelHeader = document.createElement('div');
+    Object.assign(panelHeader.style, {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        margin: '-10px -12px 0',
+        padding: '8px 12px',
+        backgroundColor: 'rgb(32, 36, 44)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.14)',
+        borderRadius: '10px 10px 0 0',
+        position: 'sticky',
+        top: '-10px',
+        zIndex: '2',
+        cursor: 'grab',
+        touchAction: 'none',
+        flexShrink: '0'
+    });
+    const panelTitle = document.createElement('span');
+    panelTitle.textContent = 'Control Panel';
+    Object.assign(panelTitle.style, { fontWeight: '800', fontSize: '13px', letterSpacing: '0.3px', color: '#ffd600' });
+    const dragHint = document.createElement('span');
+    dragHint.textContent = '⠿';
+    Object.assign(dragHint.style, { color: '#9ca3af', fontSize: '14px' });
+    panelHeader.appendChild(panelTitle);
+    panelHeader.appendChild(dragHint);
+
+    let drag = null;
+    panelHeader.addEventListener('pointerdown', (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        const rect = panel.getBoundingClientRect();
+        drag = { id: e.pointerId, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+        panelHeader.setPointerCapture(e.pointerId);
+        panelHeader.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    panelHeader.addEventListener('pointermove', (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        const rect = panel.getBoundingClientRect();
+        const maxLeft = Math.max(0, window.innerWidth - rect.width);
+        const maxTop = Math.max(0, window.innerHeight - 40);
+        panel.style.left = `${Math.min(maxLeft, Math.max(0, e.clientX - drag.dx))}px`;
+        panel.style.top = `${Math.min(maxTop, Math.max(0, e.clientY - drag.dy))}px`;
+        panel.style.maxHeight = `calc(100vh - ${Math.round(Math.min(maxTop, Math.max(0, e.clientY - drag.dy))) + 16}px)`;
+    });
+    const endDrag = (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        drag = null;
+        panelHeader.style.cursor = 'grab';
+        if (panelHeader.hasPointerCapture(e.pointerId)) panelHeader.releasePointerCapture(e.pointerId);
+    };
+    panelHeader.addEventListener('pointerup', endDrag);
+    panelHeader.addEventListener('pointercancel', endDrag);
+
+    panel.appendChild(panelHeader);
     panel.appendChild(soundSection);
+    panel.appendChild(levelSection);
 
     const toggleOthersBtn = document.createElement('button');
     Object.assign(toggleOthersBtn.style, {
@@ -4067,6 +4187,22 @@ function mountStructureVisibilityUI({
     subRow.appendChild(makeSubToggle('Núcleo', bakedNucleo));
     subRow.appendChild(makeSubToggle('Sleeper', bakedSleeper));
     subRow.appendChild(makeSubToggle('Chassi', bakedChassis));
+    {
+        // Lombada: liga/desliga a existência (visual + física). Ligada por padrão.
+        const lbl = document.createElement('label');
+        Object.assign(lbl.style, { display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' });
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = SPEED_BUMP_ENABLED_BY_DEFAULT;
+        chk.addEventListener('change', () => {
+            if (typeof devPanelHooks.setSpeedBumpEnabled === 'function') {
+                chk.checked = Boolean(devPanelHooks.setSpeedBumpEnabled(chk.checked));
+            }
+        });
+        lbl.appendChild(chk);
+        lbl.appendChild(document.createTextNode('Lombada'));
+        subRow.appendChild(lbl);
+    }
     if (Array.isArray(wheelMeshes)) {
         const lbl = document.createElement('label');
         Object.assign(lbl.style, {
@@ -4157,16 +4293,15 @@ function mountStructureVisibilityUI({
             ]
         },
         {
-            id: 'caixaFarois',
-            title: 'Caixa de Suporte dos Faróis',
+            id: 'lombada',
+            title: 'Lombada (quebra-molas) — coordenadas do pátio',
             sliders: [
-                { key: 'larguraMoldura', label: 'Largura da Moldura Cromada', min: 0.002, max: 0.045, step: 0.0005 },
-                { key: 'posX', label: 'Posição X (Centro Lateral |X|)', min: 0.350, max: 1.250, step: 0.001 },
-                { key: 'posY', label: 'Posição Y (Base ao Solo)', min: 0.500, max: 1.400, step: 0.001 },
-                { key: 'posZ', label: 'Posição Z (Centro Long.)', min: 3.200, max: 4.100, step: 0.001 },
-                { key: 'dimX', label: 'Dimensão X (Largura)', min: 0.150, max: 0.900, step: 0.001 },
-                { key: 'dimY', label: 'Dimensão Y (Altura)', min: 0.080, max: 0.650, step: 0.001 },
-                { key: 'dimZ', label: 'Dimensão Z (Comprimento)', min: 0.050, max: 0.700, step: 0.001 }
+                { key: 'posX', label: 'Posição X (Centro)', min: -29.0, max: 29.0, step: 0.05 },
+                { key: 'posY', label: 'Posição Y (Base ao Solo)', min: -0.20, max: 1.00, step: 0.005 },
+                { key: 'posZ', label: 'Posição Z (Centro)', min: -34.0, max: 14.0, step: 0.05 },
+                { key: 'dimX', label: 'Dimensão X (Comprimento no Sentido do Trânsito)', min: 0.30, max: 12.0, step: 0.05 },
+                { key: 'dimY', label: 'Dimensão Y (Altura)', min: 0.01, max: 0.50, step: 0.005 },
+                { key: 'dimZ', label: 'Dimensão Z (Largura)', min: 0.50, max: 40.0, step: 0.05 }
             ]
         },
         {
@@ -4221,13 +4356,13 @@ function mountStructureVisibilityUI({
     ];
 
     const sectionContainers = {};
-    const controlRefs = { chassi: {}, caixaFarois: {}, chapaPassadico: {}, capo: {}, nucleo: {}, sleeper: {} };
-    let activeTab = 'caixaFarois';
+    const controlRefs = { chassi: {}, lombada: {}, chapaPassadico: {}, capo: {}, nucleo: {}, sleeper: {} };
+    let activeTab = 'lombada';
 
     const tabButtons = {};
     const setTab = (tabId) => {
         activeTab = tabId;
-        ['chassi', 'caixaFarois', 'chapaPassadico', 'capo', 'nucleo', 'sleeper', 'todos'].forEach(id => {
+        ['chassi', 'lombada', 'chapaPassadico', 'capo', 'nucleo', 'sleeper', 'todos'].forEach(id => {
             const btn = tabButtons[id];
             if (!btn) return;
             const isSelected = id === activeTab;
@@ -4241,7 +4376,7 @@ function mountStructureVisibilityUI({
 
     [
         { id: 'chassi', label: 'Chassi' },
-        { id: 'caixaFarois', label: 'Cx. Faróis' },
+        { id: 'lombada', label: 'Lombada' },
         { id: 'chapaPassadico', label: 'Chapa' },
         { id: 'capo', label: 'Capô' },
         { id: 'nucleo', label: 'Núcleo' },
@@ -4282,7 +4417,7 @@ function mountStructureVisibilityUI({
 
     const updateOutputBox = () => {
         const formatted = {};
-        for (const partId of ['chassi', 'caixaFarois', 'chapaPassadico', 'capo', 'nucleo', 'sleeper']) {
+        for (const partId of ['chassi', 'lombada', 'chapaPassadico', 'capo', 'nucleo', 'sleeper']) {
             formatted[partId] = {};
             for (const [k, v] of Object.entries(cabinParams[partId])) {
                 formatted[partId][k] = Number(v.toFixed(4));
@@ -4432,7 +4567,7 @@ function mountStructureVisibilityUI({
     });
     resetBtn.addEventListener('click', () => {
         partDefs.forEach(part => {
-            Object.assign(cabinParams[part.id], DEFAULT_CABIN_ELEMENTS_PARAMS[part.id]);
+            Object.assign(cabinParams[part.id], partDefaults(part.id));
             part.sliders.forEach(cfg => {
                 const val = cabinParams[part.id][cfg.key];
                 controlRefs[part.id][cfg.key].rangeInput.value = val;
@@ -4447,7 +4582,7 @@ function mountStructureVisibilityUI({
     btnRow.appendChild(resetBtn);
     tunerBody.appendChild(btnRow);
 
-    setTab('caixaFarois');
+    setTab('lombada');
     updateOutputBox();
     panel.appendChild(tunerBody);
     document.body.appendChild(panel);

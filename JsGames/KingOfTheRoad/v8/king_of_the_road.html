@@ -1271,7 +1271,7 @@
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">1 Finger</kbd> Drag screen to orbit camera</li>
             <li><kbd class="font-bold bg-gray-700 px-2 py-1 rounded">2 Fingers</kbd> Pinch screen to zoom</li>
             <li><span class="guide-icons" data-guide-icons="camera"></span>Switch camera views</li>
-            <li><span class="guide-icons" data-guide-icons="lights"></span>Lights (off / position / headlights)</li>
+            <li><span class="guide-icons" data-guide-icons="lights"></span>Lights (off / position / low beam / high beam)</li>
             <li><span class="guide-icons" data-guide-icons="horn"></span>Horn (hold)</li>
             <li><span class="guide-icons" data-guide-icons="sound help fullscreen"></span>Sound, Help &amp; Fullscreen</li>
           </ul>
@@ -1328,7 +1328,7 @@
           <p><span class="font-bold">▲ GO:</span> Forward / Brake</p>
           <p><span class="font-bold">▼ REV:</span> Reverse / Brake</p>
           <p><span class="guide-icons" data-guide-icons="park"></span>Release / lock park brake</p>
-          <p><span class="guide-icons" data-guide-icons="lights"></span>Lights (off / position / headlights)</p>
+          <p><span class="guide-icons" data-guide-icons="lights"></span>Lights (off / position / low beam / high beam)</p>
           <p><span class="guide-icons" data-guide-icons="horn"></span>Horn (hold)</p>
           <p><span class="guide-icons" data-guide-icons="hitch"></span>Hitch / unhitch (stopped + P)</p>
           <p><span class="guide-icons" data-guide-icons="camera"></span>Switch camera views</p>
@@ -1377,6 +1377,7 @@
     import { TrunkTrailer } from './trunk_trailer.js';
     import { Stopwatch } from './stopwatch.js';
     import { VictoryScreen } from './victory_screen.js';
+    import { registerDevPanelHooks } from './kenworth_w900_visual.js';
     import {
       MobileControls,
       detectMobileDevice,
@@ -1800,6 +1801,19 @@
         if (mobileControls) mobileControls.releaseAllInputs();
         victoryScreen.show(summary);
       };
+      // Painel da tecla C: ajuste da lombada e seletor de fases (com penalidade de tempo)
+      registerDevPanelHooks({
+        numLevels: level_manager.numLevels,
+        setSpeedBump: (params) => scenario.setSpeedBump(params),
+        setSpeedBumpEnabled: (on) => scenario.setSpeedBumpEnabled(on),
+        getLevelTitle: (n) => level_manager.levelTitles[n] || '',
+        jumpToLevel: (n) => {
+          victoryScreen.hide();
+          if (mobileControls) mobileControls.releaseAllInputs();
+          level_manager.jumpToLevel(n);
+          if (mobileControls) mobileControls.syncHUD();
+        }
+      });
       level_manager.setupLevel();
       mobileControls.syncHUD();
 
@@ -2077,6 +2091,14 @@
           w900.engineSound.resume();
         }
       };
+
+      // Enter na tela inicial (lista de comandos) entra no jogo, igual ao botão Play Game
+      document.addEventListener('keydown', (e) => {
+        if (gameStarted || e.key !== 'Enter' || e.repeat) return;
+        if (startScreen.style.display === 'none') return;
+        e.preventDefault();
+        startButton.click();
+      });
 
       startButton.addEventListener('click', () => {
         if (gameStarted) return;

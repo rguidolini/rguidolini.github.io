@@ -41,6 +41,10 @@ const HINTS = {
         desktop: "🅿 To finish: press Space to lock the parking brake",
         mobile: "🅿 To finish: tap (P) to lock the parking brake"
     },
+    nightHeadlights: {
+        desktop: "🌙 It's night — press L twice for low beams, three times for high beams (L cycles: off → position → low → high)",
+        mobile: "🌙 It's night — tap the lights button twice for low beams, three times for high beams"
+    },
     finishEngine: {
         desktop: "🔌 To finish: press E to turn off the engine",
         mobile: "🔌 To finish: tap START/STOP to turn off the engine"
@@ -54,6 +58,21 @@ export function controlHint(key) {
     return isMobile ? h.mobile : h.desktop;
 }
 
+// Intensidade (candelas) de cada facho de farol alto à noite; de dia o facho quase não aparece (o sol ofusca)
+const HEADLIGHT_BEAM_INTENSITY = 520;
+const HEADLIGHT_DAY_FACTOR = 0.25;
+// Estágios das luzes (tecla L): apagado -> posição (só brilho, sem facho) -> farol baixo -> farol alto
+const LIGHT_OFF = 0, LIGHT_LOW = 2, LIGHT_HIGH = 3, LIGHT_STAGES = 4;
+// O farol baixo clareia metade do farol alto
+const LOW_BEAM_FACTOR = 0.5;
+// Luzes de ré: 1,5% da potência máxima dos faróis
+const REVERSE_BEAM_FACTOR = 0.015;
+// Mira dos fachos (coordenadas do cavalo). Farol alto: quase reto, alcança longe.
+// Estágio 2 (baixo): inclinado para baixo, com o limite superior do facho logo abaixo da horizontal
+// (não passa de ~1 m de altura a 20 m, ou seja, fica abaixo do topo do muro de concreto).
+const HIGH_BEAM_AIM = { angle: 0.44, penumbra: 0.5, targetY: -0.6 };
+const LOW_BEAM_AIM = { angle: 0.30, penumbra: 0.15, targetY: -4.99 };   // borda superior nítida em ~-0,01 rad
+
 export class KenworthW900 {
     Initialize(params) {
         this.parkingBrakeOn = null;
@@ -63,7 +82,7 @@ export class KenworthW900 {
         this._crankEndMs = 0;
         this.currentThrottle = 0;
         this.currentBrake = 0;
-        this.lightingState = 0; // 0: apagado, 1: luzes de posição, 2: faróis
+        this.lightingState = 0; // 0: apagado, 1: luzes de posição, 2: farol baixo, 3: farol alto
         this.lastSpeedKmh = -1;
         this._notifications = [];
         this._forwardVec = new CANNON.Vec3(0, 0, 1);
@@ -77,7 +96,7 @@ export class KenworthW900 {
         this.worldTrailer = params.worldTrailer || null;
         this._kingPinInFifthWheel = false;
         // Estatísticas da partida (usadas na tela de zeramento)
-        this.stats = { horns: 0, hitches: 0 };
+        this.stats = { horns: 0, hitches: 0, lightsOn: 0, nightHeadlights: false };
         this._hornHeld = false;
         this.engineSound = new W900EngineSound();
         this.engineSound.start();
@@ -125,6 +144,30 @@ export class KenworthW900 {
         });
         this.truckModel = truckModel;
         this.chassisMesh.add(truckModel);
+
+        // Fachos dos faróis (luz real projetada no chão). Sempre presentes, com intensidade 0 quando apagados:
+        // assim o número de luzes da cena não muda e não há recompilação de shaders. Sem sombra (desempenho).
+        this._headlightBeams = [-1, 1].map((side) => {
+            const beam = new THREE.SpotLight(0xfff1d8, 0, 80, 0.44, 0.5, 1.2);
+            beam.castShadow = false;
+            beam.position.set(side * 0.88, 0.40, 3.95);
+            beam.target.position.set(side * 0.9, -0.6, 22);
+            this.chassisMesh.add(beam);
+            this.chassisMesh.add(beam.target);
+            return beam;
+        });
+        // Fachos das luzes de ré (faróis de trabalho no alto da traseira do sleeper), apontados para o chão atrás
+        this._reverseBeams = [-1, 1].map((side) => {
+            const beam = new THREE.SpotLight(0xfff6e6, 0, 40, 0.31, 0.6, 1.2);   // facho estreito
+            beam.castShadow = false;
+            beam.position.set(side * 0.77, 2.16, -0.75);
+            beam.target.position.set(side * 1.3, -0.8, -12);
+            this.chassisMesh.add(beam);
+            this.chassisMesh.add(beam.target);
+            return beam;
+        });
+        this._reverseLightsOn = false;
+        this.nightMode = false;
 
         // Physics and Visual for Wheels
         const axles = ["front", "rear", "truck"];
@@ -222,7 +265,7 @@ export class KenworthW900 {
             this._crankEndMs = 0;
             this.currentThrottle = 0;
             this.reverseThrottle = false;
-            this.setReverseLights(this.isMoving() < 0);
+            this._refreshReverseLights();
             if (this.vehicle && this.vehicle.wheelInfos) {
                 for (let i = 2; i < 6 && i < this.vehicle.wheelInfos.length; i++) {
                     this.vehicle.applyEngineForce(0, i);
@@ -255,7 +298,7 @@ export class KenworthW900 {
         if (!this.engineOn) {
             this.currentThrottle = 0;
             this.reverseThrottle = false;
-            this.setReverseLights(this.isMoving() < 0);
+            this._refreshReverseLights();
             for (let i = 2; i < 6; i++) {
                 this.vehicle.applyEngineForce(0, i);
             }
@@ -268,7 +311,7 @@ export class KenworthW900 {
         if (this.isEngineStarting()) {
             this.currentThrottle = 0;
             this.reverseThrottle = false;
-            this.setReverseLights(this.isMoving() < 0);
+            this._refreshReverseLights();
             for (let i = 2; i < 6; i++) {
                 this.vehicle.applyEngineForce(0, i);
             }
@@ -277,13 +320,14 @@ export class KenworthW900 {
         }
         this.currentThrottle = powerFraction;
         this.reverseThrottle = powerFraction < 0;
-        this.setReverseLights(this.reverseThrottle || this.isMoving() < 0);
+        this._refreshReverseLights();
         if (powerFraction != 0) {
             if (this.parkingBrakeOn) {
                 this.showWarning(controlHint('parkingBrakeDrive'), { group: 'parking-brake' });
             }
             this.vehicle.chassisBody.allowSleep = false;
             this.vehicle.chassisBody.wakeUp();
+            this.showNightHint();
         }
         const maxForce = -2000 * MASS_SCALE;  // The negative values is because the car was crated in the wrong axis
         let force = maxForce * powerFraction;
@@ -334,7 +378,24 @@ export class KenworthW900 {
         }
     }
 
+    /**
+     * Luzes de ré com memória: acendem ao engatar/andar de ré, continuam acesas com o caminhão parado
+     * e só apagam quando ele passa a andar para frente.
+     * @param {number=} movingDir: resultado de isMoving() (1 frente, -1 ré, 0 parado), se já calculado.
+     */
+    _refreshReverseLights(movingDir) {
+        const dir = typeof movingDir === 'number' ? movingDir : this.isMoving();
+        if (this.reverseThrottle || dir < 0) this._reverseLatched = true;
+        else if (dir > 0) this._reverseLatched = false;
+        this.setReverseLights(Boolean(this._reverseLatched));
+    }
+
     setReverseLights(isReversing) {
+        const on = Boolean(isReversing);
+        if (on !== this._reverseLightsOn) {
+            this._reverseLightsOn = on;
+            this._updateHeadlightBeams();
+        }
         if (this.truckModel && this.truckModel.userData && typeof this.truckModel.userData.setReverseLights === 'function') {
             this.truckModel.userData.setReverseLights(isReversing);
         }
@@ -342,11 +403,14 @@ export class KenworthW900 {
 
     setHeadlights(stateOrBool) {
         if (typeof stateOrBool === 'number') {
-            this.lightingState = ((stateOrBool % 3) + 3) % 3;
+            this.lightingState = ((stateOrBool % LIGHT_STAGES) + LIGHT_STAGES) % LIGHT_STAGES;
         } else {
-            this.lightingState = stateOrBool ? 2 : 0;
+            this.lightingState = stateOrBool ? LIGHT_HIGH : LIGHT_OFF;
         }
         this.headlightsOn = this.lightingState > 0;
+        this._updateHeadlightBeams();
+        if (this.lightingState >= LIGHT_LOW) this.invalidateNotifications('night-hint');
+        if (this.nightMode && this.lightingState >= LIGHT_LOW && this.stats) this.stats.nightHeadlights = true;
         if (this.truckModel && this.truckModel.userData) {
             if (typeof this.truckModel.userData.setLightingState === 'function') {
                 this.truckModel.userData.setLightingState(this.lightingState);
@@ -356,8 +420,39 @@ export class KenworthW900 {
         }
     }
 
+    /** Fase noturna: lembra o jogador de ligar os faróis (recomendado, não obrigatório). */
+    setNightMode(on) {
+        this.nightMode = Boolean(on);
+        if (!this.nightMode) this.invalidateNotifications('night-hint');
+        this._updateHeadlightBeams();
+    }
+
+    _updateHeadlightBeams() {
+        if (!this._headlightBeams) return;
+        const base = this.nightMode ? HEADLIGHT_BEAM_INTENSITY : HEADLIGHT_BEAM_INTENSITY * HEADLIGHT_DAY_FACTOR;
+        const stageFactor = this.lightingState === LIGHT_HIGH ? 1 : (this.lightingState === LIGHT_LOW ? LOW_BEAM_FACTOR : 0);
+        const aim = this.lightingState === LIGHT_LOW ? LOW_BEAM_AIM : HIGH_BEAM_AIM;
+        this._headlightBeams.forEach((b) => {
+            b.intensity = base * stageFactor;
+            b.angle = aim.angle;
+            b.penumbra = aim.penumbra;
+            b.target.position.y = aim.targetY;
+        });
+        if (this._reverseBeams) {
+            const rev = this._reverseLightsOn ? base * REVERSE_BEAM_FACTOR : 0;
+            this._reverseBeams.forEach((b) => { b.intensity = rev; });
+        }
+    }
+
+    showNightHint() {
+        if (!this.nightMode || this.lightingState >= LIGHT_LOW) return;
+        this._pushNotification(controlHint('nightHeadlights'), 'info', 8000, { group: 'night-hint' });
+    }
+
     toggleHeadlights() {
-        const nextState = ((this.lightingState || 0) + 1) % 3;
+        const prevState = this.lightingState || 0;
+        const nextState = (prevState + 1) % LIGHT_STAGES;
+        if (prevState === LIGHT_OFF && nextState !== LIGHT_OFF && this.stats) this.stats.lightsOn++;
         this.setHeadlights(nextState);
         return this.lightingState;
     }
@@ -375,7 +470,7 @@ export class KenworthW900 {
     }
 
     resetStats() {
-        this.stats = { horns: 0, hitches: 0 };
+        this.stats = { horns: 0, hitches: 0, lightsOn: 0, nightHeadlights: false };
     }
 
     setEngineVariant(variantId) {
@@ -738,6 +833,7 @@ export class KenworthW900 {
         this.currentBrake = 0;
         this.reverseThrottle = false;
         this.setBrakeLights(false);
+        this._reverseLatched = false;
         this.setReverseLights(false);
         if (this.engineSound) {
             this.engineSound.setFrozen(true);
@@ -793,6 +889,7 @@ export class KenworthW900 {
         this._kingPinInFifthWheel = false;
         this.reverseThrottle = false;
         this.setBrakeLights(false);
+        this._reverseLatched = false;
         this.setReverseLights(false);
         for (let i = 0; i < this.vehicle.wheelInfos.length; i++) {
             this.vehicle.applyEngineForce(0, i);
@@ -918,7 +1015,7 @@ export class KenworthW900 {
         }
 
         const movingDir = this.isMoving();
-        this.setReverseLights(Boolean(this.reverseThrottle) || movingDir < 0);
+        this._refreshReverseLights(movingDir);
         if (this._notifications.length > 0 && movingDir === 0) {
             this.invalidateNotifications('trailer-moving', 800);
         }

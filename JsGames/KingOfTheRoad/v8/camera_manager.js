@@ -120,6 +120,18 @@ class OrbitalCamera extends Camera {
         if (this.onUiSync) this.onUiSync();
     }
 
+    /** Posiciona a câmera orbital num ângulo específico (theta/phi em radianos, raio em metros). */
+    SetView(theta, phi, radius) {
+        this.cameraTheta = theta;
+        this.cameraPhi = phi;
+        this.cameraRadius = radius;
+        this.clampAngles();
+        this.currentTheta = this.cameraTheta;
+        this.currentPhi = this.cameraPhi;
+        this.currentRadius = this.cameraRadius;
+        if (this.onUiSync) this.onUiSync();
+    }
+
     ResetRightView() {
         this.cameraTheta = -Math.PI / 2;
         this.cameraPhi = Math.PI / 3;

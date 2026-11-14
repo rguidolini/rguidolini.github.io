@@ -36,9 +36,11 @@ export class Scenario {
         this.world = world;
         // Iluminação e mapa de ambiente mantidos iguais (o visual do caminhão não muda)
         this.scene.environment = createProceduralEnvironment(this.renderer);
-        this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        this.scene.add(this.ambientLight);
         this.scene.fog = new THREE.Fog(FOG_COLOR, 90, 320);
         const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        this.dirLight = dirLight;
         dirLight.position.set(20, 30, -20);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
@@ -52,8 +54,10 @@ export class Scenario {
         this.scene.add(dirLight);
 
         const childrenBeforeScenery = new Set(this.scene.children);
-        createSky(this.scene);
+        this.sky = createSky(this.scene);
         createGround(this.scene, world);
+        this.speedBumpParams = { ...SPEED_BUMP_DEFAULTS };
+        this.speedBump = SPEED_BUMP_ENABLED_BY_DEFAULT ? createSpeedBump(this.scene, world, this.speedBumpParams) : null;
         createYardMarkings(this.scene);
         this.addParkingZone(3.5, 8.5, 0, 0);
 
@@ -61,9 +65,9 @@ export class Scenario {
         const longWallLength = 60;
         const yOffset = 15;
         const yPos = -wallLength / 2 + yOffset;
-        this.walls.push(createBoundaryWall(0, yOffset, longWallLength, true, this.scene, world, GATE));  // Front (com portão)
+        this.walls.push(createBoundaryWall(0, yOffset, longWallLength, true, this.scene, world));  // Front
         this.walls.push(createBoundaryWall(0, -wallLength + yOffset, longWallLength, true, this.scene, world));  // Back
-        this.walls.push(createBoundaryWall(-longWallLength / 2, yPos, wallLength, false, this.scene, world));  // Right
+        this.walls.push(createBoundaryWall(-longWallLength / 2, yPos, wallLength, false, this.scene, world, GATE));  // Right (com portão)
         this.walls.push(createBoundaryWall(longWallLength / 2, yPos, wallLength, false, this.scene, world));  // Left
 
         createSurroundings(this.scene);
@@ -72,7 +76,7 @@ export class Scenario {
 
         // Desempenho: junta todo o cenário estático em uma malha por material (centenas de peças -> dezenas
         // de chamadas de desenho). Ficam de fora: luzes, árvores instanciadas, cones e a vaga (mudam por fase).
-        const dynamic = new Set([this.parkingZone, ...this.cones.map((c) => c.mesh)]);
+        const dynamic = new Set([this.parkingZone, ...(this.speedBump ? [this.speedBump.group] : []), ...this.cones.map((c) => c.mesh)]);
         const staticRoot = new THREE.Group();
         staticRoot.name = 'cenarioEstatico';
         this.scene.children
@@ -80,6 +84,81 @@ export class Scenario {
             .forEach((c) => staticRoot.attach(c));
         this.scene.add(staticRoot);
         this.bakeStats = bakeStaticByMaterial(staticRoot);
+
+        // Modo noturno: poças de luz dos postes/docas (fora do agrupamento; só aparecem à noite)
+        this.lightPools = createLightPools(NIGHT.pools);
+        this.scene.add(this.lightPools);
+        this.nightMode = false;
+        this._daySkyMap = this.sky.material.map;
+        this._nightSkyMap = null;
+    }
+
+    /**
+     * Reposiciona/redimensiona a lombada (visual + física). Valores fora dos limites são ajustados.
+     * @param {{posX:number,posY:number,posZ:number,dimX:number,dimY:number,dimZ:number}} params
+     */
+    setSpeedBump(params) {
+        const p = {};
+        for (const [key, [lo, hi]] of Object.entries(SPEED_BUMP_LIMITS)) {
+            const v = Number(params && params[key]);
+            p[key] = Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : SPEED_BUMP_DEFAULTS[key];
+        }
+        this.speedBumpParams = p;
+        if (this.speedBump) {
+            this._removeSpeedBump();
+            this.speedBump = createSpeedBump(this.scene, this.world, p);
+        }
+        return p;
+    }
+
+    /**
+     * Cria ou remove a lombada por completo (visual e corpo físico), não apenas a visibilidade.
+     * @param {boolean} enabled
+     */
+    setSpeedBumpEnabled(enabled) {
+        const on = Boolean(enabled);
+        if (on && !this.speedBump) {
+            this.speedBump = createSpeedBump(this.scene, this.world, this.speedBumpParams);
+        } else if (!on && this.speedBump) {
+            this._removeSpeedBump();
+        }
+        return Boolean(this.speedBump);
+    }
+
+    _removeSpeedBump() {
+        if (!this.speedBump) return;
+        this.scene.remove(this.speedBump.group);
+        this.speedBump.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+        this.world.remove(this.speedBump.body);
+        this.speedBump = null;
+    }
+
+    /**
+     * Liga/desliga a noite. Só muda intensidades, cores e texturas (o número de luzes não muda),
+     * então não há recompilação de shaders nem engasgo ao trocar de fase.
+     * @param {boolean} on: true para noite.
+     */
+    setNightMode(on) {
+        const night = Boolean(on);
+        if (night === this.nightMode) return;
+        this.nightMode = night;
+        if (night && !this._nightSkyMap) this._nightSkyMap = makeNightSkyTexture();
+        this.ambientLight.color.setHex(night ? 0x8a9ccc : 0xffffff);
+        this.ambientLight.intensity = night ? 0.008 : 0.7;   // quase breu: sem farol, quase nada aparece
+        this.dirLight.color.setHex(night ? 0xa9bcff : 0xffffff);   // luar
+        this.dirLight.intensity = night ? 0.02 : 2.0;
+        this.scene.environmentIntensity = night ? 0.01 : 1.0;
+        const fogColor = night ? NIGHT_FOG_COLOR : FOG_COLOR;
+        this.scene.fog.color.setHex(fogColor);
+        this.scene.background.setHex(fogColor);
+        this.sky.material.map = night ? this._nightSkyMap : this._daySkyMap;
+        this.sky.material.needsUpdate = true;
+        NIGHT.lampMats.forEach((m) => {
+            if (m.userData.dayEmissive === undefined) m.userData.dayEmissive = m.emissive.getHex();
+            m.emissive.setHex(night ? 0xfff0c8 : m.userData.dayEmissive);
+            m.emissiveIntensity = night ? 2.2 : 1.0;
+        });
+        this.lightPools.visible = night;
     }
 
     addParkingZone(sizeX, sizeZ, posX, posZ) {
@@ -219,9 +298,26 @@ const FOG_COLOR = 0xc9d6df;
 // Limites do pátio (muros): x de -30 a 30, z de -35 a 15
 const YARD = { minX: -30, maxX: 30, minZ: -35, maxZ: 15 };
 
-// Portão de correr de entrada no muro da frente (z = 15), vão de x = 10 a x = 18.
+// Portão de correr de entrada no muro lateral esquerdo (x = -30), vão de z = -24 a z = -16, centrado na
+// posição inicial do caminhão nas fases 2 e 3 (z = -20), como se ele tivesse acabado de entrar.
 // É estático e fechado: a colisão do muro continua cobrindo o vão.
-const GATE = { start: 10, end: 18, z: 15 };
+const GATE = { x: -30, start: -24, end: -16 };
+// Estrada de terra do portão até a rodovia (por fora do pátio)
+const DIRT_ROAD = { xOuter: -40, xInner: -34, roadEdgeZ: 20.5 };
+
+// Lombada (quebra-molas) na pista do fundo, atravessando o trajeto das fases 2 e 3: perfil arredondado de
+// 1,5 m no sentido do trânsito (dimX), 8 cm de altura (dimY) e 5,5 m de largura (dimZ).
+// Existe por padrão; é ligada/desligada e ajustada pelo painel da tecla C
+// (Scenario.setSpeedBumpEnabled / Scenario.setSpeedBump).
+export const SPEED_BUMP_DEFAULTS = Object.freeze({ posX: -19.5, posY: 0, posZ: -20, dimX: 1.5, dimY: 0.08, dimZ: 5.5 });
+export const SPEED_BUMP_ENABLED_BY_DEFAULT = true;
+const SPEED_BUMP_LIMITS = {
+    posX: [-29, 29], posY: [-0.2, 1.0], posZ: [-34, 14],
+    dimX: [0.3, 12], dimY: [0.01, 0.5], dimZ: [0.5, 40]
+};
+
+// Referências usadas pelo modo noturno (preenchidas durante a criação do cenário)
+const NIGHT = { lampMats: [], pools: [] };
 
 /** Gerador pseudoaleatório determinístico (o cenário é sempre igual a cada partida). */
 function makeRng(seed) {
@@ -654,6 +750,7 @@ function createSky(scene) {
     // Desempenho: desenhado por último entre os opacos; o teste de profundidade descarta os pixels já cobertos
     sky.renderOrder = 2;
     scene.add(sky);
+    return sky;
 }
 
 function createGround(scene, world) {
@@ -770,13 +867,16 @@ function createYardMarkings(scene) {
     const xL = YARD.minX + 0.1 + W;
     const zF = YARD.maxZ - 0.1 - W;
     const zB = YARD.minZ + 0.1 + W;
-    const path = [
-        [-18.6, zF], [xR, zF], [xR, zB], [xL, zB], [xL, -17.4],
-        [-21.1, -17.4], [-21.1, -8.6], [-18.6, -8.6], [-18.6, zF]
+    // Interrompida no vão do portão (muro esquerdo, z de -24 a -16)
+    const paths = [
+        [[-18.6, zF], [xR, zF], [xR, zB], [xL, zB], [xL, GATE.start - 0.3]],
+        [[-27.5, -17.4], [-21.1, -17.4], [-21.1, -8.6], [-18.6, -8.6], [-18.6, zF]]
     ];
-    for (let i = 0; i < path.length - 1; i++) {
-        yellow.push(paintStripGeo(path[i][0], path[i][1], path[i + 1][0], path[i + 1][1], 0.16));
-    }
+    paths.forEach((path) => {
+        for (let i = 0; i < path.length - 1; i++) {
+            yellow.push(paintStripGeo(path[i][0], path[i][1], path[i + 1][0], path[i + 1][1], 0.16));
+        }
+    });
     // Zebrado amarelo em frente ao escritório (área de pedestres)
     for (let k = 0; k < 9; k++) {
         const z = -16.8 + k * 0.85;
@@ -815,7 +915,8 @@ function createYardMarkings(scene) {
 }
 
 
-const parkingZoneMaterial = new THREE.MeshBasicMaterial({
+// Material iluminado (não brilha sozinho): à noite a vaga só aparece quando um farol ou poste a ilumina
+const parkingZoneMaterial = new THREE.MeshLambertMaterial({
     color: 0xffd23f,
     transparent: true,
     opacity: 0.22,
@@ -889,9 +990,10 @@ function createBoundaryWall(x, z, length, isXAligned, scene, world, gap = null) 
     const columnGeos = [];
     const panelGeos = [];
 
-    // Vão do portão (em coordenadas locais do muro)
-    const gapStart = gap ? gap.start - (isXAligned ? x : z) : null;
-    const gapEnd = gap ? gap.end - (isXAligned ? x : z) : null;
+    // Vão do portão (em coordenadas locais do muro). Nos muros ao longo de z, o grupo é girado 90° e o
+    // eixo x local aponta para -z do mundo, por isso o intervalo é espelhado.
+    const gapStart = gap ? (isXAligned ? gap.start - x : -(gap.end - z)) : null;
+    const gapEnd = gap ? (isXAligned ? gap.end - x : -(gap.start - z)) : null;
     const inGap = (a, b) => gap !== null && b > gapStart + 1e-3 && a < gapEnd - 1e-3;
 
     for (let i = 0; i < numUnits; i++) {
@@ -968,14 +1070,20 @@ function createBoundaryWall(x, z, length, isXAligned, scene, world, gap = null) 
 // ============================================================================
 
 function createEntranceGate(scene) {
-    const { start, end, z } = GATE;
+    // Montado num referencial local (muro ao longo do x local em z = 0, lado de fora em +z) e depois
+    // posicionado no muro esquerdo: x local -> z do mundo, +z local -> -x do mundo.
+    const root = new THREE.Group();
+    root.position.set(GATE.x, 0, 0);
+    root.rotation.y = -Math.PI / 2;
+    scene.add(root);
+    const start = GATE.start, end = GATE.end, z = 0;
     const width = end - start;
     const tail = 3.2;                 // contrapeso do portão autoportante (fica fora do vão)
     const zGate = z + 0.38;           // pelo lado de fora do muro (não invade o pátio)
     const yBase = 0.12;
     const leafH = 2.3;
     const group = new THREE.Group();
-    scene.add(group);
+    root.add(group);
 
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x30353a, roughness: 0.45, metalness: 0.65 });
     const barMat = new THREE.MeshStandardMaterial({ color: 0x3a4046, roughness: 0.5, metalness: 0.6 });
@@ -1057,14 +1165,14 @@ function createEntranceGate(scene) {
         ctx.font = 'bold 44px Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('ATENÇÃO', w / 2, 34);
+        ctx.fillText('CAUTION', w / 2, 34);
         ctx.fillStyle = '#111111';
         ctx.font = 'bold 40px Arial, sans-serif';
-        ctx.fillText('ENTRADA E SAÍDA', w / 2, 110);
-        ctx.fillText('DE CAMINHÕES', w / 2, 158);
+        ctx.fillText('TRUCK ENTRANCE', w / 2, 110);
+        ctx.fillText('AND EXIT', w / 2, 158);
         ctx.font = 'bold 30px Arial, sans-serif';
         ctx.fillStyle = '#374151';
-        ctx.fillText('VELOCIDADE MÁX. 10 km/h', w / 2, 212);
+        ctx.fillText('SPEED LIMIT 5 MPH', w / 2, 212);
         ctx.strokeStyle = '#111111';
         ctx.lineWidth = 8;
         ctx.strokeRect(4, 4, w - 8, h - 8);
@@ -1112,23 +1220,25 @@ function createEntranceGate(scene) {
     const rollers = new THREE.Mesh(mergeAndDispose(rollerGeos), galvanizedMaterial);
     group.add(rollers);
 
-    // Acesso asfaltado do portão até a rodovia + faixa de retenção
-    const driveLen = 20.55 - z;
-    const drive = new THREE.Mesh(
-        new THREE.PlaneGeometry(width + 2, driveLen),
-        cheapMaterial({ map: makeAsphaltTexture([(width + 2) / 12, driveLen / 12]) }, 1.8)
-    );
-    drive.rotation.x = -Math.PI / 2;
-    drive.position.set((start + end) / 2, -0.012, z + driveLen / 2);
-    drive.receiveShadow = true;
-    scene.add(drive);
-    const stop = new THREE.Mesh(paintStripGeo(start, z + 1.6, end, z + 1.6, 0.35), paintMaterial(0xe9e9e4));
-    stop.position.y = -0.008;
-    scene.add(stop);
+    // Estrada de terra (por fora do pátio): pátio de manobra em frente ao portão + trecho até a rodovia
+    const dirtMat = cheapMaterial({ map: makeGravelTexture([1, 1]), color: 0xb98d5c }, 1.25);
+    const addDirt = (x0, x1, z0, z1) => {
+        const w = x1 - x0, d = z1 - z0;
+        const geo = new THREE.PlaneGeometry(w, d);
+        const uv = geo.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 6, uv.getY(i) * d / 6);
+        const m = new THREE.Mesh(geo, dirtMat);
+        m.rotation.x = -Math.PI / 2;
+        m.position.set((x0 + x1) / 2, -0.035, (z0 + z1) / 2);
+        m.receiveShadow = true;
+        scene.add(m);
+    };
+    addDirt(DIRT_ROAD.xOuter, GATE.x - 0.2, GATE.start, GATE.end);
+    addDirt(DIRT_ROAD.xOuter, DIRT_ROAD.xInner, GATE.end, DIRT_ROAD.roadEdgeZ);
 
     // Guarita ao lado do portão (do lado de fora)
-    const boothX = end + tail + 2.6;
-    const boothZ = z + 3.0;
+    const boothX = end + tail + 2.0;
+    const boothZ = z + 1.9;
     const facade = makeOfficeFacadeTexture();
     facade.repeat.set(0.45, 1);
     facade.needsUpdate = true;
@@ -1138,15 +1248,15 @@ function createEntranceGate(scene) {
     booth.position.set(boothX, 1.25, boothZ);
     booth.castShadow = true;
     booth.receiveShadow = true;
-    scene.add(booth);
+    root.add(booth);
     const roof = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.18, 2.8), boothRoof);
     roof.position.set(boothX, 2.6, boothZ);
     roof.castShadow = true;
-    scene.add(roof);
+    root.add(roof);
     const boothBase = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 2.6), concreteMat);
     boothBase.position.set(boothX, 0.06, boothZ);
     boothBase.receiveShadow = true;
-    scene.add(boothBase);
+    root.add(boothBase);
 }
 
 
@@ -1166,10 +1276,9 @@ function createLightPoles(scene) {
     const poleGeos = [];
     const lampGeos = [];
     const positions = [];
-    [-28, -13, 2].forEach((z) => positions.push([31.3, z, -1, 0]));
-    [-28, -20].forEach((z) => positions.push([-31.3, z, 1, 0]));
-    [-20, -2, 16].forEach((x) => positions.push([x, -36.3, 0, 1]));
-    [-12, 6, 22].forEach((x) => positions.push([x, 16.3, 0, -1]));
+    [-28].forEach((z) => positions.push([-31.3, z, 1, 0]));
+    [16].forEach((x) => positions.push([x, -36.3, 0, 1]));
+    [-12, 22].forEach((x) => positions.push([x, 16.3, 0, -1]));
     positions.forEach(([x, z, dx, dz]) => {
         const pole = new THREE.CylinderGeometry(0.09, 0.14, 9, 8);
         pole.translate(x, 4.5, z);
@@ -1187,8 +1296,12 @@ function createLightPoles(scene) {
     const poles = new THREE.Mesh(mergeAndDispose(poleGeos), new THREE.MeshStandardMaterial({ color: 0x8d949b, roughness: 0.5, metalness: 0.7 }));
     poles.castShadow = true;
     scene.add(poles);
-    const lamps = new THREE.Mesh(mergeAndDispose(lampGeos), new THREE.MeshStandardMaterial({ color: 0xf3f0e6, emissive: 0x2a2820, roughness: 0.3 }));
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0xf3f0e6, emissive: 0x2a2820, roughness: 0.3 });
+    const lamps = new THREE.Mesh(mergeAndDispose(lampGeos), lampMat);
     scene.add(lamps);
+    NIGHT.lampMats.push(lampMat);
+    // Poça de luz no chão do pátio, um pouco à frente da luminária (poste de 9 m)
+    positions.forEach(([x, z, dx, dz]) => NIGHT.pools.push({ x: x + dx * 5.0, z: z + dz * 5.0, r: 10.5, strength: 0.62 }));
 }
 
 function buildSemiTrailer(bodyColor, seed) {
@@ -1343,6 +1456,7 @@ function createTrees(scene) {
             if (z > 18 && z < 33) continue;                       // rodovia
             if (x > 34 && x < 52 && z > -22 && z < -2) continue;  // contêineres
             if (x > -26 && x < 0 && z > -56 && z < -36) continue; // carretas
+            if (x > -46 && x < -28 && z > -30 && z < 22) continue; // estrada de terra e guarita
             const hgt = (vi === 2 ? 9 : 7) + rng() * 6;
             dummy.position.set(x, 0, z);
             dummy.rotation.set(0, rng() * Math.PI, 0);
@@ -1459,7 +1573,10 @@ function createWarehouse(x, z, rotationY, scene, world) {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.6, metalness: 0.4 });
     const canopyMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ab, roughness: 0.5, metalness: 0.6 });
     const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0x6b6040, roughness: 0.3 });
+    NIGHT.lampMats.push(lightMat);
     [-7, 0, 7].forEach((dx, i) => {
+        const poolPos = new THREE.Vector3(dx, 0, mainDepth / 2 + 2.6).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotationY);
+        NIGHT.pools.push({ x: x + poolPos.x, z: z + poolPos.z, r: 4.8, strength: 0.55 });
         // Moldura vazada (topo + laterais) ao redor da porta; a porta fica 9 cm à frente da parede (4 cm à frente do rodapé) e a moldura
         // se projeta à frente dela (distâncias generosas evitam z-fighting quando a câmera está longe)
         const frameGeos = [];
@@ -1740,4 +1857,178 @@ function createProceduralEnvironment(renderer) {
     envTexture.dispose();
     pmremGenerator.dispose();
     return renderTarget.texture;
+}
+
+
+// ============================================================================
+// MODO NOTURNO: CÉU ESTRELADO E POÇAS DE LUZ
+// ============================================================================
+
+const NIGHT_FOG_COLOR = 0x0b1222;
+
+function makeNightSkyTexture() {
+    const rng = makeRng(907);
+    return canvasTexture(2048, 1024, (ctx, w, h) => {
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0.0, '#03060f');
+        g.addColorStop(0.35, '#08112a');
+        g.addColorStop(0.47, '#1a2747');
+        g.addColorStop(0.5, '#2b3a5c');   // brilho da cidade no horizonte
+        g.addColorStop(0.52, '#0b1222');
+        g.addColorStop(1.0, '#0b1222');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+        for (let i = 0; i < 900; i++) {
+            const y = h * 0.47 * Math.pow(rng(), 1.3);
+            const r = rng() < 0.92 ? 0.7 : 1.4;
+            ctx.fillStyle = `rgba(255,255,255,${0.35 + rng() * 0.6})`;
+            ctx.beginPath();
+            ctx.arc(rng() * w, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Lua
+        const mx = w * 0.62, my = h * 0.18;
+        const halo = ctx.createRadialGradient(mx, my, 0, mx, my, 70);
+        halo.addColorStop(0, 'rgba(220,230,255,0.35)');
+        halo.addColorStop(1, 'rgba(220,230,255,0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(mx - 70, my - 70, 140, 140);
+        ctx.fillStyle = '#eef2ff';
+        ctx.beginPath();
+        ctx.arc(mx, my, 16, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+/**
+ * Poças de luz no chão (postes e docas): planos com gradiente radial em mistura aditiva, todos numa única
+ * malha. Muito mais barato que luzes reais (que pesariam no shader de todos os objetos da cena).
+ */
+function createLightPools(pools) {
+    const tex = canvasTexture(256, 256, (ctx, w, h) => {
+        const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+        g.addColorStop(0.0, 'rgba(255,226,170,0.62)');
+        g.addColorStop(0.35, 'rgba(255,214,150,0.40)');
+        g.addColorStop(0.7, 'rgba(255,200,130,0.12)');
+        g.addColorStop(1.0, 'rgba(255,200,130,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+    });
+    const geos = pools.map(({ x, z, r, strength }) => {
+        const geo = new THREE.PlaneGeometry(r * 2, r * 2);
+        geo.rotateX(-Math.PI / 2);
+        geo.translate(x, 0.03, z);
+        const n = geo.attributes.position.count;
+        geo.setAttribute('color', new THREE.Float32BufferAttribute(new Array(n * 3).fill(strength), 3));
+        return geo;
+    });
+    const mesh = new THREE.Mesh(mergeAndDispose(geos), new THREE.MeshBasicMaterial({
+        map: tex, vertexColors: true, transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, toneMapped: false, fog: false
+    }));
+    mesh.renderOrder = 3;
+    mesh.visible = false;
+    mesh.name = 'pocasDeLuz';
+    return mesh;
+}
+
+// ============================================================================
+// LOMBADA (QUEBRA-MOLAS)
+// ============================================================================
+
+/** Altura do perfil da lombada (arco de círculo) em função da posição u ∈ [-1, 1] no sentido do trânsito. */
+function speedBumpProfile(u, length, height) {
+    const half = length / 2;
+    const R = (half * half + height * height) / (2 * height);
+    const x = u * half;
+    return Math.max(0, Math.sqrt(R * R - x * x) - (R - height));
+}
+
+let speedBumpMaterials = null;
+function getSpeedBumpMaterials() {
+    if (speedBumpMaterials) return speedBumpMaterials;
+    const tex = canvasTexture(128, 128, (ctx, w, h) => {
+        ctx.fillStyle = '#1c1c1c';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#f2c200';
+        ctx.fillRect(0, 0, w, h / 2);
+    });
+    speedBumpMaterials = {
+        top: new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 }),
+        cap: new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.9 })
+    };
+    return speedBumpMaterials;
+}
+
+/**
+ * Cria a lombada (visual + corpo físico estático).
+ * @returns {{group: THREE.Group, body: CANNON.Body}}
+ */
+function createSpeedBump(scene, world, params) {
+    const { posX: cx, posY: cy, posZ: cz, dimX: length, dimY: height, dimZ: width } = params;
+    const prof = (u) => speedBumpProfile(u, length, height);
+    const N = 16;
+    const half = length / 2;
+    const hw = width / 2;
+    const BOTTOM = -0.05;
+
+    // Física: prisma convexo com o topo em arco (as rodas do RaycastVehicle "sobem" nele)
+    const pts = [];
+    for (let i = 0; i <= N; i++) pts.push(new CANNON.Vec3(-half + (length * i) / N, prof(-1 + (2 * i) / N), -hw));
+    for (let i = 0; i <= N; i++) pts.push(new CANNON.Vec3(-half + (length * i) / N, prof(-1 + (2 * i) / N), hw));
+    const B0L = pts.length; pts.push(new CANNON.Vec3(-half, BOTTOM, -hw));
+    const B0R = pts.length; pts.push(new CANNON.Vec3(half, BOTTOM, -hw));
+    const B1L = pts.length; pts.push(new CANNON.Vec3(-half, BOTTOM, hw));
+    const B1R = pts.length; pts.push(new CANNON.Vec3(half, BOTTOM, hw));
+    const T0 = (i) => i, T1 = (i) => N + 1 + i;
+    const faces = [];
+    for (let i = 0; i < N; i++) faces.push([T0(i), T1(i), T1(i + 1), T0(i + 1)]);
+    const front = [B0L]; for (let i = 0; i <= N; i++) front.push(T0(i)); front.push(B0R); faces.push(front);
+    const back = [B1R]; for (let i = N; i >= 0; i--) back.push(T1(i)); back.push(B1L); faces.push(back);
+    faces.push([B0L, B0R, B1R, B1L]);
+    faces.push([B0L, B1L, T1(0), T0(0)]);
+    faces.push([B0R, T0(N), T1(N), B1R]);
+    const body = new CANNON.Body({ mass: 0 });
+    body.addShape(new CANNON.ConvexPolyhedron(pts, faces));
+    body.position.set(cx, cy, cz);
+    world.addBody(body);
+
+    // Visual: superfície em arco com faixas amarelas e pretas (uma faixa a cada 0,5 m)
+    const mats = getSpeedBumpMaterials();
+    const pos = [], uv = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+        const u = -1 + (2 * i) / N;
+        const y = prof(u) + 0.004;
+        pos.push(u * half, y, -hw, u * half, y, hw);
+        uv.push(i / N, 0, i / N, width);
+    }
+    for (let i = 0; i < N; i++) {
+        const a = 2 * i, b = a + 1, c = a + 2, d = a + 3;
+        idx.push(a, b, c, c, b, d);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const capShape = new THREE.Shape();
+    capShape.moveTo(-half, 0);
+    for (let i = 0; i <= N; i++) capShape.lineTo(-half + (length * i) / N, prof(-1 + (2 * i) / N) + 0.004);
+    capShape.lineTo(half, 0);
+    const capGeoA = new THREE.ShapeGeometry(capShape);
+    capGeoA.translate(0, 0, hw);
+    const capGeoB = new THREE.ShapeGeometry(capShape);
+    capGeoB.rotateY(Math.PI);
+    capGeoB.translate(0, 0, -hw);
+
+    const group = new THREE.Group();
+    group.name = 'lombada';
+    group.position.set(cx, cy, cz);
+    const top = new THREE.Mesh(geo, mats.top);
+    top.receiveShadow = true;
+    top.castShadow = true;
+    group.add(top);
+    group.add(new THREE.Mesh(mergeAndDispose([capGeoA, capGeoB]), mats.cap));
+    scene.add(group);
+    return { group, body };
 }

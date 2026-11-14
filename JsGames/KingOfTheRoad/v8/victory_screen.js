@@ -72,6 +72,10 @@ export class VictoryScreen {
 
     hide() {
         this._clearTimers();
+        if (this._onKey) {
+            window.removeEventListener('keydown', this._onKey, true);
+            this._onKey = null;
+        }
         if (this.root) {
             this.root.remove();
             this.root = null;
@@ -84,9 +88,11 @@ export class VictoryScreen {
 
         // Recorde pessoal: menor tempo; empate -> menos tentativas
         const prevBest = loadBest();
-        const isNewBest = !prevBest ||
+        // Partidas com o seletor de fases (painel da tecla C) não valem recorde
+        const assisted = Boolean(summary.assisted);
+        const isNewBest = !assisted && (!prevBest ||
             summary.totalMs < prevBest.timeMs ||
-            (summary.totalMs === prevBest.timeMs && summary.totalAttempts < prevBest.attempts);
+            (summary.totalMs === prevBest.timeMs && summary.totalAttempts < prevBest.attempts));
         const best = isNewBest
             ? { timeMs: summary.totalMs, attempts: summary.totalAttempts, grade: g.grade }
             : prevBest;
@@ -134,10 +140,12 @@ export class VictoryScreen {
         const attemptsVal = el('div', 'victory-stat-value', '0');
         addStat('🔁', 'Attempts', attemptsVal);
         addStat('✅', 'First try', el('div', 'victory-stat-value', `${summary.firstTry} / ${summary.numLevels}`));
-        const bestBox = addStat('🏆', 'Personal best', el('div', 'victory-stat-value', formatTime(best.timeMs)));
+        const bestBox = addStat('🏆', 'Personal best', el('div', 'victory-stat-value', best ? formatTime(best.timeMs) : '—'));
         if (isNewBest) {
             bestBox.classList.add('is-new-best');
             bestBox.appendChild(el('div', 'victory-new-best', 'NEW RECORD!'));
+        } else if (assisted) {
+            bestBox.appendChild(el('div', 'victory-stat-sub', 'Level select used — not a record'));
         } else {
             bestBox.appendChild(el('div', 'victory-stat-sub', `${best.attempts} attempts`));
         }
@@ -151,6 +159,16 @@ export class VictoryScreen {
         thead.appendChild(hr);
         table.appendChild(thead);
         const tbody = el('tbody');
+        if (summary.penaltyMs > 0) {
+            const tr = el('tr');
+            const tdName = el('td', 'victory-level-name');
+            tdName.appendChild(el('span', 'victory-level-num', '⏩'));
+            tdName.appendChild(el('span', null, 'Level select (+10 min per level)'));
+            tr.appendChild(tdName);
+            tr.appendChild(el('td', null, formatTime(summary.penaltyMs)));
+            tr.appendChild(el('td', null, '—'));
+            tbody.appendChild(tr);
+        }
         summary.levels.forEach((l) => {
             const tr = el('tr', l.attempts === 1 ? 'is-first-try' : '');
             const tdName = el('td', 'victory-level-name');
@@ -176,7 +194,9 @@ export class VictoryScreen {
             ['💥', 'Crashes', totalCrashes === 0 ? 'none — flawless!' :
                 `${totalCrashes} (cones ${c.cone} · walls ${c.wall} · warehouse ${c.warehouse} · trailer ${c.trailer})`],
             ['📯', 'Horn honks', summary.horns],
-            ['🔗', 'Trailer hitches', summary.hitches]
+            ['🔗', 'Trailer hitches', summary.hitches],
+            ['💡', 'Lights switched on', `${summary.lightsOn || 0} · ` +
+                (summary.nightHeadlights ? 'night level with headlights on ✔' : 'night level in the dark 😎')]
         ].forEach(([icon, label, value]) => {
             const li = el('li');
             li.appendChild(el('span', 'victory-fact-label', `${icon} ${label}`));
@@ -257,6 +277,26 @@ export class VictoryScreen {
 
         // Play again com confirmação (modal próprio, sem diálogos nativos do navegador)
         playBtn.addEventListener('click', () => this._confirmPlayAgain());
+
+        // Teclado: Enter abre a confirmação; na confirmação, Enter reinicia e Esc cancela
+        this._onKey = (e) => {
+            if (!this.root || (e.key !== 'Enter' && e.key !== 'Escape')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.repeat) return;
+            const confirmBox = this.root.querySelector('.victory-confirm');
+            if (e.key === 'Escape') {
+                if (confirmBox) confirmBox.remove();
+                return;
+            }
+            if (confirmBox) {
+                const ok = confirmBox.querySelector('.victory-btn-primary');
+                if (ok) ok.click();
+            } else {
+                this._confirmPlayAgain();
+            }
+        };
+        window.addEventListener('keydown', this._onKey, true);
         this._timers.push(setTimeout(() => playBtn.focus({ preventScroll: true }), 400));
     }
 

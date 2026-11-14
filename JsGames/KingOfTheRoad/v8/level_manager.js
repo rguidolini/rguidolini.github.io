@@ -1,6 +1,20 @@
 import { TRAILER_REST_Y } from './trunk_trailer.js';
 import { controlHint } from './kenworth_w900.js';
 
+// Fases 2 e 3: o caminhão começa logo após o portão do muro esquerdo, de frente para a lombada,
+// com a traseira (z local -3,955) a 40 cm da face interna do muro (x = -29,9) e centralizado nela (z = -20).
+const GATE_START = { x: -29.9 + 0.40 + 3.955, z: -20, angle: Math.PI / 2 };
+// Câmera 0 (orbital) inicial dessas fases: atrás e à direita do caminhão, alta, com a vaga ao fundo
+const GATE_START_VIEW = { theta: -2.9, phi: 1.25, radius: 38 };
+// Fase 3: close lateral do caminhão (lado do motorista), quase na altura das rodas, para ver a suspensão trabalhar
+const LEVEL3_CLOSEUP_VIEW = { theta: Math.PI, phi: 1.45, radius: 12.5 };
+
+// Fase que acontece à noite (Intermediate Trailer Skills)
+const NIGHT_LEVEL = 5;
+
+// Seletor de fases (painel da tecla C): para não virar atalho, a fase N começa no minuto N × 10
+const LEVEL_SELECT_PENALTY_MS = 10 * 60 * 1000;
+
 export class LevelManager {
     constructor(uiElements, camera, truck, trunk_trailer, keyboardController, scenario, stopwatch) {
         this.gameEnded = false;
@@ -47,6 +61,12 @@ export class LevelManager {
         } else {
             this.stopwatch.Start();
         }
+        // Fase noturna: o jogador precisa ligar os faróis para enxergar bem
+        const night = this.currentLevel === NIGHT_LEVEL;
+        if (typeof this.scenario.setNightMode === 'function') this.scenario.setNightMode(night);
+        if (typeof this.truck.setNightMode === 'function') this.truck.setNightMode(night);
+        // Toda fase começa com os faróis apagados
+        if (typeof this.truck.setHeadlights === 'function') this.truck.setHeadlights(0);
         if (this.currentLevel === 1) this.setupLevel1();
         if (this.currentLevel === 2) this.setupLevel2();
         if (this.currentLevel === 3) this.setupLevel3();
@@ -66,7 +86,9 @@ export class LevelManager {
             levelInProgress: null,
             levelStartMs: 0,
             levelFails: 0,
-            waitingForFirstAction: true
+            waitingForFirstAction: true,
+            assisted: false,     // usou o seletor de fases
+            penaltyMs: 0         // tempo somado pelo seletor de fases
         };
         if (this.truck && typeof this.truck.resetStats === 'function') this.truck.resetStats();
     }
@@ -78,12 +100,35 @@ export class LevelManager {
         this.setupLevel();
     }
 
+    /**
+     * Pula para a fase escolhida no painel da tecla C. Penalidade: o cronômetro vai para N × 10 min
+     * (nunca diminui) e a partida deixa de valer recorde.
+     * @param {number} level: fase de 1 a numLevels.
+     */
+    jumpToLevel(level) {
+        const n = Number(level);
+        if (!Number.isInteger(n) || n < 1 || n > this.numLevels) return false;
+        if (!(this.run && this.run.active)) this._startRun();
+        const run = this.run;
+        const target = Math.max(this.stopwatch.getElapsedMs(), n * LEVEL_SELECT_PENALTY_MS);
+        this.stopwatch.setElapsedMs(target);
+        run.waitingForFirstAction = false;
+        run.assisted = true;
+        run.levels = [];
+        run.penaltyMs = target;
+        run.levelInProgress = null;
+        this.currentLevel = n;
+        this.setupLevel();
+        return true;
+    }
+
     _buildRunSummary() {
         const levels = this.run.levels.slice();
-        const totalMs = levels.reduce((acc, l) => acc + l.timeMs, 0);
+        const penaltyMs = this.run.penaltyMs || 0;
+        const totalMs = levels.reduce((acc, l) => acc + l.timeMs, 0) + penaltyMs;
         const totalAttempts = levels.reduce((acc, l) => acc + l.attempts, 0);
         const firstTry = levels.filter((l) => l.attempts === 1).length;
-        const stats = (this.truck && this.truck.stats) ? this.truck.stats : { horns: 0, hitches: 0 };
+        const stats = (this.truck && this.truck.stats) ? this.truck.stats : { horns: 0, hitches: 0, lightsOn: 0, nightHeadlights: false };
         return {
             totalMs,
             totalAttempts,
@@ -92,7 +137,11 @@ export class LevelManager {
             levels,
             crashes: { ...this.run.crashes },
             horns: stats.horns,
-            hitches: stats.hitches
+            hitches: stats.hitches,
+            lightsOn: stats.lightsOn || 0,
+            nightHeadlights: Boolean(stats.nightHeadlights),
+            assisted: Boolean(this.run.assisted),
+            penaltyMs
         };
     }
 
@@ -161,6 +210,15 @@ export class LevelManager {
         this._evaluateCompletion(parked, "You parked successfuly!");
     }
 
+    _setGateStartView() {
+        this._setOrbitalView(GATE_START_VIEW);
+    }
+
+    _setOrbitalView(view) {
+        const cam = this.camera.GetObject();
+        if (cam && typeof cam.SetView === 'function') cam.SetView(view.theta, view.phi, view.radius);
+    }
+
     setupLevel1() {
         this.updateUi("Simple Maneuver", "Align and park the truck, lock brake and turn off engine.");
 
@@ -185,10 +243,10 @@ export class LevelManager {
         this.scenario.addConeCollisions(this.trunk_trailer.vehicle, this);
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(20, 0.85, -20, -Math.PI / 2);
+        this.truck.reset(GATE_START.x, 0.85, GATE_START.z, GATE_START.angle);
         this.trunk_trailer.Reset(-7, TRAILER_REST_Y, 9, Math.PI / 2);
         this.camera.SwitchTo("orbital");
-        this.camera.Reset();
+        this._setGateStartView();
 
         this.checkSuccessFunction = () => this.simpleParking();
     }
@@ -201,10 +259,10 @@ export class LevelManager {
         this.scenario.addConeCollisions(this.trunk_trailer.vehicle, this);
 
         this.keyboardController.lockParkingBreak();
-        this.truck.reset(20, 0.85, -20, -Math.PI / 2);
+        this.truck.reset(GATE_START.x, 0.85, GATE_START.z, GATE_START.angle);
         this.trunk_trailer.Reset(-7, TRAILER_REST_Y, 9, Math.PI / 2);
         this.camera.SwitchTo("orbital");
-        this.camera.GetObject().ResetLeftView();
+        this._setOrbitalView(LEVEL3_CLOSEUP_VIEW);
 
         this.checkSuccessFunction = () => {
             const chassisBody = this.truck.vehicle.chassisBody;
@@ -214,7 +272,7 @@ export class LevelManager {
     }
 
     setupLevel4() {
-        this.updateUi("Trailer Abilities", "Hitch and park the trailer on the indicated area, lock brake & turn off engine.");
+        this.updateUi("Basic Trailer Skills", "Hitch and park the trailer on the indicated area, lock brake & turn off engine.");
 
         const parkX = 12;
         const parkZ = 9;
@@ -240,7 +298,7 @@ export class LevelManager {
     }
 
     setupLevel5() {
-        this.updateUi("Advanced Trailer Abilities", "Hitch and park the trailer on the left, lock brake & turn off engine.");
+        this.updateUi("Intermediate Trailer Skills", "Hitch and park the trailer on the left, lock brake & turn off engine.");
 
         const parkX = 15;
         const parkZ = -18;
@@ -251,6 +309,8 @@ export class LevelManager {
         this.keyboardController.lockParkingBreak();
         this.truck.reset(0, 0.85, 12, Math.PI / 2);
         this.trunk_trailer.Reset(-12, TRAILER_REST_Y, 12, Math.PI / 2);
+        this.truck.setHeadlights(0);       // começa de faróis apagados: o jogador liga
+        this.truck.showNightHint();
         this.camera.SwitchTo("orbital");
         this.camera.GetObject().ResetRightView();
 
@@ -265,7 +325,7 @@ export class LevelManager {
     }
 
     setupLevel6() {
-        this.updateUi("Advanced Trailer Abilities", "Hitch and reverse park the trailer, lock brake & turn off engine.");
+        this.updateUi("Advanced Trailer Skills", "Hitch and reverse park the trailer, lock brake & turn off engine.");
 
         const parkX = -12;
         const parkZ = 9.5;

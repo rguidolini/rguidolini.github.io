@@ -44,6 +44,14 @@ export class Stopwatch {
         this.intervalId = null;
     }
 
+    /** Ajusta o tempo decorrido (usado pela penalidade do seletor de fases). */
+    setElapsedMs(ms) {
+        const v = Math.max(0, Number(ms) || 0);
+        this.elapsedTime = v;
+        if (this.intervalId) this.startTime = Date.now();
+        if (this.element) this.element.innerText = this._formatTime(v);
+    }
+
     /** Tempo decorrido em ms (inclui o trecho em andamento, se estiver rodando). */
     getElapsedMs() {
         if (this.intervalId && this.startTime) {
