@@ -3,7 +3,8 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function TrunkTrailerVisual(trunkL, axle1Z, axle2Z) {
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xcccccc });
+    // Frisos dos painéis: faixas finas com material iluminado (linhas LineBasic não recebem luz e "acendiam" no escuro)
+    const lineMaterial = new THREE.MeshStandardMaterial({ color: 0xc4c4c4, metalness: 0.2, roughness: 0.6 });
     const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, metalness: 0.2, roughness: 0.6 });
     const chassisMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.7 });
     const reflectorMaterial = new THREE.MeshStandardMaterial({ color: 0xff4500 });
@@ -38,24 +39,33 @@ export function TrunkTrailerVisual(trunkL, axle1Z, axle2Z) {
     trunk.receiveShadow = true;
     trunkGroup.add(trunk);
 
-    // Panel lines + back door lines combinadas em um único LineSegments (1 draw call em vez de 30)
+    // Frisos dos painéis laterais + porta traseira: faixas de 2 cm numa única malha (1 draw call)
     const linesX = trunkW / 2 + 0.005;
     const linesZ = trunkL / 2;
     const topLine = trunkH / 2 - 0.2;
-    const linePoints = [];
+    const stripW = 0.02;
+    const stripGeos = [];
     for (let i = -trunkH / 2 + 0.2; i < topLine; i += 0.2) {
-        linePoints.push(
-            new THREE.Vector3(-linesX, i, linesZ), new THREE.Vector3(-linesX, i, -linesZ),
-            new THREE.Vector3(linesX, i, linesZ), new THREE.Vector3(linesX, i, -linesZ)
-        );
+        [-1, 1].forEach((side) => {
+            const g = new THREE.PlaneGeometry(trunkL, stripW);
+            g.rotateY(side * Math.PI / 2);          // face voltada para fora (+x ou -x)
+            g.translate(side * linesX, i, 0);
+            stripGeos.push(g);
+        });
     }
-    // back door
-    linePoints.push(
-        new THREE.Vector3(-linesX, topLine, -linesZ - 0.005), new THREE.Vector3(linesX, topLine, -linesZ - 0.005),
-        new THREE.Vector3(0, trunkH / 2, -linesZ - 0.005), new THREE.Vector3(0, -trunkH / 2, -linesZ - 0.005)
-    );
-    const mergedLinesGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
-    trunkGroup.add(new THREE.LineSegments(mergedLinesGeo, lineMaterial));
+    // porta traseira (face voltada para -z): friso horizontal e divisão vertical central
+    const doorH = new THREE.PlaneGeometry(trunkW, stripW);
+    doorH.rotateY(Math.PI);
+    doorH.translate(0, topLine, -linesZ - 0.005);
+    stripGeos.push(doorH);
+    const doorV = new THREE.PlaneGeometry(stripW, trunkH);
+    doorV.rotateY(Math.PI);
+    doorV.translate(0, 0, -linesZ - 0.005);
+    stripGeos.push(doorV);
+    const strips = new THREE.Mesh(BufferGeometryUtils.mergeGeometries(stripGeos, false), lineMaterial);
+    stripGeos.forEach((g) => g.dispose());
+    strips.receiveShadow = true;
+    trunkGroup.add(strips);
 
     addPart("frige", createRefrigerator(trunkW - 0.8, trunkH - 0.8, 0.3));
     parts.frige.position.set(0, trunkH + chassiH / 2 - 0.02, chassiL / 2 + 0.1);

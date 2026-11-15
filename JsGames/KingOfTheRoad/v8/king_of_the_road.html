@@ -796,10 +796,10 @@
       position: absolute;
       left: calc(12px + env(safe-area-inset-left, 0px));
       bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-      width: 142px;
+      width: 158px;          /* 2 botões de 67px + vão de 24px (vão triplicado; botões do mesmo tamanho) */
       display: flex;
       align-items: flex-end;
-      gap: 8px;
+      gap: 24px;
       pointer-events: none;
     }
 
@@ -807,10 +807,10 @@
       position: absolute;
       right: calc(12px + env(safe-area-inset-right, 0px));
       bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-      width: 142px;
+      width: 158px;
       display: flex;
       align-items: flex-end;
-      gap: 8px;
+      gap: 24px;
       pointer-events: none;
     }
 
@@ -906,8 +906,8 @@
     @media (orientation: landscape) and (max-width: 780px) {
       #mobile-steer-pad,
       #mobile-pedal-pad {
-        width: 118px;
-        gap: 6px;
+        width: 130px;
+        gap: 18px;
       }
 
       #mobile-controls-root {
@@ -919,8 +919,8 @@
     @media (orientation: landscape) and (max-width: 640px) {
       #mobile-steer-pad,
       #mobile-pedal-pad {
-        width: 104px;
-        gap: 5px;
+        width: 114px;
+        gap: 15px;
       }
 
       #mobile-controls-root {
@@ -1174,7 +1174,25 @@
     @media (max-width: 520px) {
       .victory-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-  </style>
+      /* Tela de carregamento (spinner animado só com transform: continua girando mesmo com o JS ocupado) */
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 60; display: none;
+      flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      background: #1f2937; color: #f3f4f6; font-family: Inter, system-ui, sans-serif;
+      transition: opacity 0.35s ease;
+    }
+    #loading-overlay.is-visible { display: flex; }
+    #loading-overlay.is-fading { opacity: 0; pointer-events: none; }
+    .loading-spinner {
+      width: 56px; height: 56px; border-radius: 50%;
+      border: 6px solid rgba(255, 255, 255, 0.15); border-top-color: #ffd600;
+      animation: loading-spin 0.9s linear infinite; will-change: transform;
+    }
+    @keyframes loading-spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 1rem; font-weight: 600; letter-spacing: 0.3px; }
+    .loading-bar { width: min(320px, 70vw); height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+    .loading-bar-fill { height: 100%; width: 0%; background: #ffd600; transition: width 0.25s ease; }
+</style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
@@ -1282,6 +1300,12 @@
         Play Game
       </button>
     </div>
+  </div>
+
+  <div id="loading-overlay" role="status" aria-live="polite">
+    <div class="loading-spinner" aria-hidden="true"></div>
+    <div class="loading-text" id="loading-text">Loading…</div>
+    <div class="loading-bar" aria-hidden="true"><div class="loading-bar-fill" id="loading-bar-fill"></div></div>
   </div>
 
   <div id="game-container" style="display: none;">
@@ -1727,8 +1751,23 @@
     /**
      * Função principal que inicializa e orquestra a criação do jogo.
      */
-    function init() {
+    /** Atualiza a tela de carregamento (texto + barra de 0 a 1). */
+    function setLoading(text, fraction) {
+      const t = document.getElementById('loading-text');
+      const f = document.getElementById('loading-bar-fill');
+      if (t) t.textContent = text;
+      if (f) f.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+    }
+    /** Devolve o controle ao navegador para ele desenhar a tela de carregamento antes do próximo passo pesado. */
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+
+    async function init() {
       gameStarted = true;
+      const overlay = document.getElementById('loading-overlay');
+      overlay.classList.remove('is-fading');
+      overlay.classList.add('is-visible');
+      setLoading('Loading…', 0.05);
+      await nextFrame();
 
       world = new CANNON.World();
       world.gravity.set(0, -9.82, 0);
@@ -1744,7 +1783,11 @@
       });
       world.addContactMaterial(contactMaterial);
 
+      setLoading('Building the yard…', 0.15);
+      await nextFrame();
       scenario.Initialize(world);
+      setLoading('Building the truck…', 0.4);
+      await nextFrame();
       w900.Initialize({
         world: world,
         scene: scenario.scene,
@@ -1754,6 +1797,8 @@
         fifthWheelMaterial: fifthWheelMaterial
       });
 
+      setLoading('Hitching the trailer…', 0.7);
+      await nextFrame();
       trunk_trailer.Initialize({
         world: world,
         scene: scenario.scene,
@@ -1822,7 +1867,23 @@
 
       initCannonDebugger();
 
+      // Pré-compila os shaders (sem travar o navegador, quando suportado) antes do primeiro quadro
+      setLoading('Preparing graphics…', 0.85);
+      await nextFrame();
+      try {
+        if (typeof scenario.renderer.compileAsync === 'function') {
+          await scenario.renderer.compileAsync(scenario.scene, camera.Get());
+        }
+      } catch (_err) {
+        // Sem suporte: os shaders compilam no primeiro quadro, com a tela de carregamento ainda visível
+      }
+      setLoading('Starting engine…', 1);
       animate();
+      // Some depois que os dois primeiros quadros do jogo foram desenhados
+      await nextFrame();
+      await nextFrame();
+      overlay.classList.add('is-fading');
+      setTimeout(() => overlay.classList.remove('is-visible', 'is-fading'), 400);
     }
 
 
@@ -1830,19 +1891,19 @@
      * Bater no trailer faz falhar a fase. Exceção: o engate, ou seja, o chassi/quinta roda do cavalo tocando
      * o assoalho do baú ou o pino-rei por baixo. Com a carreta engatada não há colisão entre os dois corpos
      * (collideConnected: false), então isto só vale com a carreta solta.
-     * Formas do cavalo: 0 = chassi, 1 = cabine, 2..4 = quinta roda.
+     * Formas do cavalo: 0 = chassi, 1..5 = cabine (sleeper, núcleo, capô e paralamas), 6..8 = quinta roda.
      * Formas da carreta: 0 = baú, 1 = longarina traseira, 2..3 = pés de apoio, 4 = pino-rei, 5 = unidade de refrigeração.
      */
     let checkJackknife = null;
     function setUpTrailerCrashDetection() {
       const truckBody = w900.vehicle.chassisBody;
       const trailerBody = trunk_trailer.vehicle.chassisBody;
-      const TRUCK_CAB = 1;
+      const TRUCK_CAB_SHAPES = new Set(w900.cabShapeIndices || [1]);
       const TRAILER_FLOOR = 0;
       const TRAILER_KINGPIN = 4;
       // Com a carreta engatada os dois corpos não colidem na física (collideConnected: false). Em vez de testar a
       // colisão a cada quadro, usamos o ângulo entre cavalo e carreta. CAB_CONTACT_ANGLE é o ângulo exato em que a
-      // lataria vermelha da cabine/defletores (caixa do cavalo: x ±1.20, z -1.13..+3.95) encosta na lateral do baú
+      // lataria vermelha dos defletores (quina traseira da caixa do sleeper: x ±1.20, z -1.13) encosta na lateral do baú
       // (x ±1.19, frente a 1.0 m do pino-rei) girando a carreta em torno do pino-rei (z -2.87 no cavalo), no plano do chão.
       // Calculado geometricamente uma vez: 111.2°. A unidade de refrigeração nunca alcança a cabine.
       // Se as caixas de colisão da cabine ou do baú mudarem, este valor precisa ser recalculado.
@@ -1868,7 +1929,7 @@
         const trailerShape = c.bi === trailerBody ? c.si : c.sj;
         const ti = truckBody.shapes.indexOf(truckShape);
         const ri = trailerBody.shapes.indexOf(trailerShape);
-        const isCoupling = ti !== TRUCK_CAB && (ri === TRAILER_FLOOR || ri === TRAILER_KINGPIN);
+        const isCoupling = !TRUCK_CAB_SHAPES.has(ti) && (ri === TRAILER_FLOOR || ri === TRAILER_KINGPIN);
         if (!isCoupling) {
           level_manager.failedLevel("You crashed into the trailer.");
         }
@@ -2032,7 +2093,7 @@
 
     // --- INICIAR JOGO ---
     function handleViewportResize() {
-      if (!gameStarted) return;
+      if (!gameStarted || !camera) return;   // ainda carregando
       scenario.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       camera.Resize(window.innerWidth, window.innerHeight);
       scenario.renderer.setSize(window.innerWidth, window.innerHeight);

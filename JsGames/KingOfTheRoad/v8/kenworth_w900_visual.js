@@ -6065,18 +6065,44 @@ function buildRoofVisorHornsAndLights(mats) {
         ];
     };
 
-    // 5 Luzes de Teto Aerodinâmicas Bicolores (mantêm suas dimensões e são redistribuídas proporcionalmente à nova largura do teto do núcleo)
+    // 5 Luzes de Teto Aerodinâmicas Bicolores no núcleo (mantêm suas dimensões e são redistribuídas proporcionalmente à nova largura do teto do núcleo)
     const roofLightScale = wWindTopOuter / 0.6477385;
-    [-0.555 * roofLightScale, -0.135 * roofLightScale, 0.0, 0.135 * roofLightScale, 0.555 * roofLightScale].forEach(xLight => {
+    const roofLampPlacements = [-0.555 * roofLightScale, -0.135 * roofLightScale, 0.0, 0.135 * roofLightScale, 0.555 * roofLightScale].map(xLight => {
         const uVisor = Math.min(1.0, Math.abs(xLight) / wVisorHalf);
         const zLight = 2.048 - uVisor * 0.130;
-        const yRoofSurf = getActualRoofSurfaceY(zLight, xLight);
-        const lateralTiltZ = -Math.sign(xLight) * (Math.abs(xLight) > 0.35 ? 0.09 : 0.025 * Math.abs(xLight));
-
+        return {
+            x: xLight,
+            y: getActualRoofSurfaceY(zLight, xLight) - 0.002,
+            z: zLight,
+            pitch: roofPitch,
+            tilt: -Math.sign(xLight) * (Math.abs(xLight) > 0.35 ? 0.09 : 0.025 * Math.abs(xLight))
+        };
+    });
+    // + 7 luzes iguais no teto do sleeper, na parte plana o mais à frente possível (a borda da parte plana segue o
+    // arco frontal do sleeper, então cada luz tem seu Z). Posições medidas por raycast na lataria do sleeper:
+    // frente da parte plana z = 0.555 (x 0), 0.545 (x 0.2), 0.465 (x 0.6), 0.29 (x 0.995); o teto tem um leve
+    // abaulamento lateral (altura cai ~1.4 cm do centro até x 0.97), compensado pela inclinação lateral (tilt).
+    //  - grupo central de 3 com o mesmo espaçamento do grupo central do núcleo (0.135 * roofLightScale)
+    //  - as 2 mais externas em x = ±0.97, o mais perto possível da lateral antes da curva do ombro do teto
+    //  - as 2 restantes no meio do caminho entre o grupo central e as externas
+    const xSleeperCenter = 0.135 * roofLightScale;
+    const xSleeperOuter = 0.97;
+    const xSleeperMid = (xSleeperCenter + xSleeperOuter) / 2;
+    [
+        { x: 0.0, y: 3.350, z: 0.493, tilt: 0.0 },
+        { x: xSleeperCenter, y: 3.3495, z: 0.483, tilt: -0.004 },
+        { x: xSleeperMid, y: 3.345, z: 0.403, tilt: -0.018 },
+        { x: xSleeperOuter, y: 3.3357, z: 0.228, tilt: -0.028 }
+    ].forEach(({ x, y, z, tilt }) => {
+        (x === 0 ? [1] : [-1, 1]).forEach(side => {
+            roofLampPlacements.push({ x: side * x, y: y - 0.002, z, pitch: 0, tilt: side * tilt });
+        });
+    });
+    roofLampPlacements.forEach(({ x: xLight, y: yLight, z: zLight, pitch: lampPitch, tilt: lateralTiltZ }) => {
         const lightGroup = new THREE.Group();
-        lightGroup.position.set(xLight, yRoofSurf - 0.002, zLight);
+        lightGroup.position.set(xLight, yLight, zLight);
         lightGroup.rotation.order = 'YXZ';
-        lightGroup.rotation.x = roofPitch;
+        lightGroup.rotation.x = lampPitch;
         lightGroup.rotation.z = lateralTiltZ;
 
         // 1. Junta/base de borracha preta contornando toda a gota no teto (de Z=-0.068m até Z=+0.058m)

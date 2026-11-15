@@ -59,19 +59,27 @@ export function controlHint(key) {
 }
 
 // Intensidade (candelas) de cada facho de farol alto à noite; de dia o facho quase não aparece (o sol ofusca)
-const HEADLIGHT_BEAM_INTENSITY = 520;
-const HEADLIGHT_DAY_FACTOR = 0.25;
+const HEADLIGHT_BEAM_INTENSITY = 150;   // farol alto
+const HEADLIGHT_DAY_FACTOR = 0.05;   // de dia todos os fachos ficam com 5% da potência (o sol ofusca)
 // Estágios das luzes (tecla L): apagado -> posição (só brilho, sem facho) -> farol baixo -> farol alto
 const LIGHT_OFF = 0, LIGHT_LOW = 2, LIGHT_HIGH = 3, LIGHT_STAGES = 4;
 // O farol baixo clareia metade do farol alto
-const LOW_BEAM_FACTOR = 0.5;
+const LOW_BEAM_FACTOR = 130 / HEADLIGHT_BEAM_INTENSITY;   // farol baixo = 130 cd
 // Luzes de ré: 1,5% da potência máxima dos faróis
-const REVERSE_BEAM_FACTOR = 0.015;
+const REVERSE_BEAM_FACTOR = 3.9 / HEADLIGHT_BEAM_INTENSITY;   // 3.9 cd por farol de ré do sleeper
+const REVERSE_BUMPER_FACTOR = 4 / HEADLIGHT_BEAM_INTENSITY;  // 4 cd nas luzes de ré do para-choque (as duas juntas)
+// Luzes de ré halógenas: luz mais amarelada (~3000 K)
+const HALOGEN_COLOR = 0xffd29a;
 // Mira dos fachos (coordenadas do cavalo). Farol alto: quase reto, alcança longe.
 // Estágio 2 (baixo): inclinado para baixo, com o limite superior do facho logo abaixo da horizontal
 // (não passa de ~1 m de altura a 20 m, ou seja, fica abaixo do topo do muro de concreto).
-const HIGH_BEAM_AIM = { angle: 0.44, penumbra: 0.5, targetY: -0.6 };
-const LOW_BEAM_AIM = { angle: 0.30, penumbra: 0.15, targetY: -4.99 };   // borda superior nítida em ~-0,01 rad
+// A borda de baixo dos dois fachos toca o chão ~1 m à frente do para-choque (farol a 1.16 m do chão:
+// inclinação de 0.86 rad abaixo da horizontal).
+// Farol alto: mira quase reta (alcança longe) com o facho mais aberto para chegar perto do caminhão.
+const HIGH_BEAM_AIM = { angle: 0.80, penumbra: 0.3, targetY: -0.6 };
+// Farol baixo: borda de cima nítida logo abaixo da horizontal (~-0,01 rad, abaixo do topo do muro) e borda de
+// baixo a ~1 m do para-choque.
+const LOW_BEAM_AIM = { angle: 0.435, penumbra: 0.15, targetY: -7.78 };
 
 export class KenworthW900 {
     Initialize(params) {
@@ -113,17 +121,27 @@ export class KenworthW900 {
         const chassisShape = new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, length / 2));
         chassisBody.addShape(chassisShape);
 
-        // Caixa de colisão da cabine + sleeper + defletores traseiros, medida no modelo 3D:
-        // só a lataria vermelha conta: traseira dos defletores vermelhos em z = -1.13 m (a borracha preta atrás
-        // deles, até -1.17 m, é ignorada), largura ±1.20 m, topo do sleeper ~2.75 m
-        const cabWidth = 2.40;
-        const cabRearZ = -1.13;
-        const cabLength = length / 2 - cabRearZ;  // de z = -1.13 até o para-choque (+3.95)
-        const cabHeight = 2.50;
-        const cabY = cabHeight / 2 + height / 2;
-        const cabZ = length / 2 - cabLength / 2;
-        const cabShape = new CANNON.Box(new CANNON.Vec3(cabWidth / 2, cabHeight / 2, cabLength / 2));
-        chassisBody.addShape(cabShape, new CANNON.Vec3(0, cabY, cabZ));
+        // Cabine em 5 caixas, medidas no modelo 3D (coordenadas do corpo; o topo do chassi fica em y = 0.25):
+        //  1. sleeper + defletores: só a lataria vermelha (traseira em z = -1.13, a borracha preta até -1.17 é
+        //     ignorada), largura ±1.20, topo 2.59. A quina traseira (x ±1.20, z -1.13) é a mesma usada no
+        //     cálculo de CAB_CONTACT_ANGLE (jackknife) na página.
+        //  2. núcleo (cabine do motorista): x ±0.94, z 0.97..2.33, topo 2.11
+        //  3. capô: z 2.33..3.95, topo 1.25; largura média ±0.70 (o capô afina de ±0.77 atrás para ±0.56 na frente)
+        //  4-5. paralamas dianteiros: x 0.40..1.19 de cada lado, z 2.47..3.93, y -0.46..0.59
+        // Índices das formas: 0 = chassi, 1..5 = cabine (CAB_SHAPE_INDICES), 6..8 = quinta roda.
+        const top = height / 2;
+        const addBox = (x0, x1, y0, y1, z0, z1) => {
+            chassisBody.addShape(
+                new CANNON.Box(new CANNON.Vec3((x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2)),
+                new CANNON.Vec3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)
+            );
+        };
+        addBox(-1.20, 1.20, top, 2.59, -1.13, 0.97);    // 1. sleeper + defletores
+        addBox(-0.94, 0.94, top, 2.11, 0.97, 2.33);     // 2. núcleo
+        addBox(-0.70, 0.70, top, 1.25, 2.33, length / 2); // 3. capô
+        addBox(0.40, 1.19, -0.46, 0.59, 2.47, 3.93);    // 4. paralama esquerdo
+        addBox(-1.19, -0.40, -0.46, 0.59, 2.47, 3.93);  // 5. paralama direito
+        this.cabShapeIndices = [1, 2, 3, 4, 5];
         chassisBody.allowSleep = true;
         chassisBody.sleepSpeedLimit = 0.15;
         chassisBody.sleepTimeLimit = 0.5;
@@ -158,7 +176,9 @@ export class KenworthW900 {
         });
         // Fachos das luzes de ré (faróis de trabalho no alto da traseira do sleeper), apontados para o chão atrás
         this._reverseBeams = [-1, 1].map((side) => {
-            const beam = new THREE.SpotLight(0xfff6e6, 0, 40, 0.31, 0.6, 1.2);   // facho estreito
+            // Mira longa (alcança longe atrás); facho aberto o suficiente para a parte forte do facho chegar até a
+            // quinta roda (topo y 0.46, z -2.85: 0.68 rad abaixo da horizontal a partir do farol)
+            const beam = new THREE.SpotLight(HALOGEN_COLOR, 0, 40, 0.60, 0.3, 1.2);
             beam.castShadow = false;
             beam.position.set(side * 0.77, 2.16, -0.75);
             beam.target.position.set(side * 1.3, -0.8, -12);
@@ -166,6 +186,14 @@ export class KenworthW900 {
             this.chassisMesh.add(beam.target);
             return beam;
         });
+        // Facho das 2 luzes de ré do para-choque traseiro (lentes brancas em x ±0.11, y 0.075, z -3.93), uma única
+        // luz no meio delas para não pesar. A borda mais próxima toca o chão ~0.5 m atrás do fim do chassi.
+        this._reverseBumperBeam = new THREE.SpotLight(HALOGEN_COLOR, 0, 30, 0.72, 0.3, 1.2);
+        this._reverseBumperBeam.castShadow = false;
+        this._reverseBumperBeam.position.set(0, 0.075, -3.95);
+        this._reverseBumperBeam.target.position.set(0, -0.76, -5.48);
+        this.chassisMesh.add(this._reverseBumperBeam);
+        this.chassisMesh.add(this._reverseBumperBeam.target);
         this._reverseLightsOn = false;
         this.nightMode = false;
 
@@ -441,6 +469,7 @@ export class KenworthW900 {
         if (this._reverseBeams) {
             const rev = this._reverseLightsOn ? base * REVERSE_BEAM_FACTOR : 0;
             this._reverseBeams.forEach((b) => { b.intensity = rev; });
+            if (this._reverseBumperBeam) this._reverseBumperBeam.intensity = this._reverseLightsOn ? base * REVERSE_BUMPER_FACTOR : 0;
         }
     }
 

@@ -9,8 +9,8 @@ const GATE_START_VIEW = { theta: -2.9, phi: 1.25, radius: 38 };
 // Fase 3: close lateral do caminhão (lado do motorista), quase na altura das rodas, para ver a suspensão trabalhar
 const LEVEL3_CLOSEUP_VIEW = { theta: Math.PI, phi: 1.45, radius: 12.5 };
 
-// Fase que acontece à noite (Intermediate Trailer Skills)
-const NIGHT_LEVEL = 5;
+// Fase que acontece à noite (em teste: Basic Trailer Skills; antes era a 5, Intermediate Trailer Skills)
+const NIGHT_LEVEL = 4;
 
 // Seletor de fases (painel da tecla C): para não virar atalho, a fase N começa no minuto N × 10
 const LEVEL_SELECT_PENALTY_MS = 10 * 60 * 1000;
@@ -73,6 +73,7 @@ export class LevelManager {
         if (this.currentLevel === 4) this.setupLevel4();
         if (this.currentLevel === 5) this.setupLevel5();
         if (this.currentLevel === 6) this.setupLevel6();
+        if (night && typeof this.truck.showNightHint === 'function') this.truck.showNightHint();
         return true;
     }
 
@@ -309,8 +310,6 @@ export class LevelManager {
         this.keyboardController.lockParkingBreak();
         this.truck.reset(0, 0.85, 12, Math.PI / 2);
         this.trunk_trailer.Reset(-12, TRAILER_REST_Y, 12, Math.PI / 2);
-        this.truck.setHeadlights(0);       // começa de faróis apagados: o jogador liga
-        this.truck.showNightHint();
         this.camera.SwitchTo("orbital");
         this.camera.GetObject().ResetRightView();
 
