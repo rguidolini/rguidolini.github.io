@@ -37,6 +37,34 @@ function el(tag, className, text) {
     return e;
 }
 
+/**
+ * Seção recolhível com o tempo necessário para cada nota (na tela de zeramento), destacando a nota conquistada
+ * e quanto faltou para a próxima. Usa a mesma tabela GRADES do cálculo da nota.
+ * @param {number} totalMs: tempo total da partida.
+ * @returns {HTMLDetailsElement}
+ */
+function buildRankGuide(totalMs) {
+    const current = gradeFor(totalMs);
+    const idx = GRADES.indexOf(current);
+    const details = el('details', 'victory-facts rank-guide');
+    if (!document.body.classList.contains('is-mobile')) details.open = true;
+    details.appendChild(el('summary', null, 'Ranks'));
+    const list = el('ul', 'rank-guide-list');
+    GRADES.forEach((g) => {
+        const li = el('li', g === current ? 'is-current' : '');
+        li.appendChild(el('span', `rank-guide-letter grade-${g.grade.toLowerCase()}`, g.grade));
+        li.appendChild(el('span', 'rank-guide-title', g === current ? `${g.title} — you: ${formatTime(totalMs)}` : g.title));
+        li.appendChild(el('span', 'rank-guide-time', Number.isFinite(g.maxMs) ? `up to ${formatTime(g.maxMs)}` : 'any time'));
+        list.appendChild(li);
+    });
+    details.appendChild(list);
+    const next = idx > 0 ? GRADES[idx - 1] : null;
+    details.appendChild(el('p', 'rank-guide-note', next
+        ? `${formatTime(totalMs - next.maxMs)} faster for ${next.grade} (${next.title}).`
+        : 'Top rank — nobody does it better! 👑'));
+    return details;
+}
+
 function loadBest() {
     try {
         const raw = window.localStorage.getItem(BEST_KEY);
@@ -120,9 +148,26 @@ export class VictoryScreen {
         const stamp = el('div', `victory-grade grade-${g.grade.toLowerCase()}`);
         stamp.appendChild(el('span', 'victory-grade-letter', g.grade));
         gradeWrap.appendChild(stamp);
+        // Tempo total em destaque ao lado do selo (é o que decide a nota e o recorde)
         const gradeText = el('div', 'victory-grade-text');
-        gradeText.appendChild(el('div', 'victory-grade-label', 'Rank'));
+        gradeText.appendChild(el('div', 'victory-grade-label', 'Total time'));
+        const timeVal = el('div', `victory-hero-time${isNewBest ? ' is-record' : ''}`, '00:00');
+        gradeText.appendChild(timeVal);
         gradeText.appendChild(el('div', 'victory-grade-title', g.title));
+        let compareText;
+        let compareClass = 'victory-hero-compare';
+        if (assisted) {
+            compareText = 'Level select used — not a record';
+        } else if (isNewBest && prevBest) {
+            compareText = `−${formatTime(prevBest.timeMs - summary.totalMs)} · NEW RECORD!`;
+            compareClass += ' is-record';
+        } else if (isNewBest) {
+            compareText = 'First finish · NEW RECORD!';
+            compareClass += ' is-record';
+        } else {
+            compareText = `+${formatTime(summary.totalMs - prevBest.timeMs)} vs your best (${formatTime(prevBest.timeMs)})`;
+        }
+        gradeText.appendChild(el('div', compareClass, compareText));
         gradeWrap.appendChild(gradeText);
         card.appendChild(gradeWrap);
 
@@ -135,15 +180,13 @@ export class VictoryScreen {
             statsGrid.appendChild(box);
             return box;
         };
-        const timeVal = el('div', 'victory-stat-value', '00:00');
-        addStat('⏱', 'Total time', timeVal);
         const attemptsVal = el('div', 'victory-stat-value', '0');
         addStat('🔁', 'Attempts', attemptsVal);
         addStat('✅', 'First try', el('div', 'victory-stat-value', `${summary.firstTry} / ${summary.numLevels}`));
         const bestBox = addStat('🏆', 'Personal best', el('div', 'victory-stat-value', best ? formatTime(best.timeMs) : '—'));
         if (isNewBest) {
             bestBox.classList.add('is-new-best');
-            bestBox.appendChild(el('div', 'victory-new-best', 'NEW RECORD!'));
+            bestBox.appendChild(el('div', 'victory-new-best', 'THIS RUN'));
         } else if (assisted) {
             bestBox.appendChild(el('div', 'victory-stat-sub', 'Level select used — not a record'));
         } else {
@@ -193,6 +236,7 @@ export class VictoryScreen {
         [
             ['💥', 'Crashes', totalCrashes === 0 ? 'none — flawless!' :
                 `${totalCrashes} (cones ${c.cone} · walls ${c.wall} · warehouse ${c.warehouse} · trailer ${c.trailer})`],
+            ['🚧', 'Cone touches', summary.coneTouches ? `${summary.coneTouches} (+${summary.coneTouches * 5} s)` : 'none'],
             ['📯', 'Horn honks', summary.horns],
             ['🔗', 'Trailer hitches', summary.hitches],
             ['💡', 'Lights switched on', `${summary.lightsOn || 0} · ` +
@@ -205,6 +249,9 @@ export class VictoryScreen {
         });
         facts.appendChild(factsList);
         card.appendChild(facts);
+
+        // Notas e tempos (recolhível), com a nota conquistada destacada e quanto faltou para a próxima
+        card.appendChild(buildRankGuide(summary.totalMs));
 
         // Botões
         const actions = el('div', 'victory-actions');

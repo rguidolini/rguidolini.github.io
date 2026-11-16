@@ -3911,6 +3911,16 @@ function mountStructureVisibilityUI({
     ['mousedown', 'mousemove', 'mouseup', 'wheel', 'pointerdown', 'pointermove', 'keydown', 'keyup'].forEach(evt => {
         panel.addEventListener(evt, e => e.stopPropagation());
     });
+    // No celular, toques no painel não devem girar a câmera nem acionar os controles de toque do jogo
+    ['touchstart', 'touchmove', 'touchend'].forEach(evt => {
+        panel.addEventListener(evt, e => e.stopPropagation(), { passive: true });
+    });
+    const setPanelVisible = (visible) => {
+        panel.style.display = visible ? 'flex' : 'none';
+        if (!visible && document.activeElement && panel.contains(document.activeElement)) {
+            document.activeElement.blur();
+        }
+    };
 
     // Seletor das 6 variantes de som do motor (padrão = Scania)
     const soundSection = document.createElement('div');
@@ -4084,9 +4094,21 @@ function mountStructureVisibilityUI({
     Object.assign(panelTitle.style, { fontWeight: '800', fontSize: '13px', letterSpacing: '0.3px', color: '#ffd600' });
     const dragHint = document.createElement('span');
     dragHint.textContent = '⠿';
-    Object.assign(dragHint.style, { color: '#9ca3af', fontSize: '14px' });
+    Object.assign(dragHint.style, { color: '#9ca3af', fontSize: '14px', marginLeft: 'auto', marginRight: '10px' });
+    const closePanelBtn = document.createElement('button');
+    closePanelBtn.type = 'button';
+    closePanelBtn.textContent = '✕';
+    closePanelBtn.setAttribute('aria-label', 'Close control panel');
+    Object.assign(closePanelBtn.style, {
+        width: '26px', height: '26px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.25)',
+        background: 'rgba(239, 68, 68, 0.85)', color: '#fff', fontWeight: '800', fontSize: '13px',
+        lineHeight: '1', cursor: 'pointer', flexShrink: '0'
+    });
+    closePanelBtn.addEventListener('pointerdown', (e) => e.stopPropagation());   // não inicia arrasto
+    closePanelBtn.addEventListener('click', (e) => { e.stopPropagation(); setPanelVisible(false); });
     panelHeader.appendChild(panelTitle);
     panelHeader.appendChild(dragHint);
+    panelHeader.appendChild(closePanelBtn);
 
     let drag = null;
     panelHeader.addEventListener('pointerdown', (e) => {
@@ -4593,15 +4615,28 @@ function mountStructureVisibilityUI({
             if (e.key && e.key.toLowerCase() === 'c') {
                 e.preventDefault();
                 e.stopPropagation();
-                const isHidden = panel.style.display === 'none';
-                panel.style.display = isHidden ? 'flex' : 'none';
-                if (!isHidden && document.activeElement && panel.contains(document.activeElement)) {
-                    document.activeElement.blur();
-                }
+                setPanelVisible(panel.style.display === 'none');
             }
         };
         window._toggleStructureVisibilityPanel = onToggleKey;
         window.addEventListener('keydown', onToggleKey, true);
+
+        // Recurso escondido no celular: tocar no extremo do canto superior esquerdo abre/fecha o painel
+        const oldHotspot = document.getElementById('control-panel-hotspot');
+        if (oldHotspot) oldHotspot.remove();
+        const hotspot = document.createElement('div');
+        hotspot.id = 'control-panel-hotspot';
+        hotspot.setAttribute('aria-hidden', 'true');
+        const onHotspot = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setPanelVisible(panel.style.display === 'none');
+        };
+        hotspot.addEventListener('pointerdown', onHotspot);
+        ['touchstart', 'touchmove', 'touchend', 'mousedown'].forEach(evt => {
+            hotspot.addEventListener(evt, (e) => e.stopPropagation(), { passive: true });
+        });
+        document.body.appendChild(hotspot);
     }
 
     return {

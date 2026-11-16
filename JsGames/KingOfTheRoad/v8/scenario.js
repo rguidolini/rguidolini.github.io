@@ -55,7 +55,7 @@ export class Scenario {
 
         const childrenBeforeScenery = new Set(this.scene.children);
         this.sky = createSky(this.scene);
-        createGround(this.scene, world);
+        this.groundMaterial = createGround(this.scene, world);
         this.speedBumpParams = { ...SPEED_BUMP_DEFAULTS };
         this.speedBump = SPEED_BUMP_ENABLED_BY_DEFAULT ? createSpeedBump(this.scene, world, this.speedBumpParams) : null;
         createYardMarkings(this.scene);
@@ -194,41 +194,67 @@ export class Scenario {
         this.scene.add(coneMesh);
         cone.mesh = coneMesh;
 
-        const coneBody = new CANNON.Body({
-            mass: 0,
-            shape: new CANNON.Cylinder(coneRadius + 0.01, 0.02, coneHeight + 0.05, 12),
-        });
-        const axis = new CANNON.Vec3(1, 0, 0); // Y axis
-        const angle = Math.PI / 2;
-        coneBody.quaternion.setFromAxisAngle(axis, angle);
-        coneBody.position.copy(coneMesh.position);
-        coneBody.position.y = coneHeight / 2;
+        // Cone solto (dinâmico): pode ser empurrado e derrubado. A origem do corpo fica na base (centro de massa
+        // baixo, como um cone com base pesada); a forma é girada para a ponta ficar para cima.
+        if (!this._coneMaterial) {
+            // Base de borracha que escorrega no asfalto: empurrado de leve, o cone desliza em vez de tombar
+            this._coneMaterial = new CANNON.Material('coneMaterial');
+            if (this.groundMaterial) {
+                this.world.addContactMaterial(new CANNON.ContactMaterial(this._coneMaterial, this.groundMaterial,
+                    { friction: CONE_GROUND_FRICTION, restitution: 0 }));
+            }
+        }
+        const coneBody = new CANNON.Body({ mass: CONE_MASS, material: this._coneMaterial, linearDamping: 0.35, angularDamping: 0.9 });
+        const shapeRot = new CANNON.Quaternion();
+        shapeRot.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), Math.PI / 2);
+        coneBody.addShape(new CANNON.Cylinder(coneRadius + 0.01, 0.02, coneHeight + 0.05, 12),
+            new CANNON.Vec3(0, (coneHeight + 0.05) / 2, 0), shapeRot);
+        coneBody.position.set(x, 0.002, z);
+        coneBody.allowSleep = true;
+        coneBody.sleepSpeedLimit = 0.05;
+        coneBody.sleepTimeLimit = 0.5;
         this.world.addBody(coneBody);
         cone.body = coneBody;
+        cone.lastTouchMs = -Infinity;
+        coneBody.addEventListener('collide', (event) => this._onConeContact(cone, event));
 
         this.cones.push(cone);
     }
 
+    /** Registra um veículo (cavalo ou carreta) cujo toque nos cones conta como penalidade. */
     addConeCollisions(vehicle, level_manager) {
-        this.cones.forEach((cone) => {
-            cone.body.addEventListener("collide", (event) => {
-                if (!level_manager.Ended()) {
-                    if (event.body === vehicle.chassisBody) {
-                        level_manager.failedLevel("You crashed into a cone.");
-                    }
-                }
-            });
+        if (!this._coneVehicles) this._coneVehicles = new Set();
+        this._coneVehicles.add(vehicle.chassisBody);
+        // Sem atrito entre a lataria e o cone: um raspão lateral não "puxa" o topo do cone (o que o derrubaria)
+        const mat = vehicle.chassisBody.material;
+        if (!this._coneVehicleMats) this._coneVehicleMats = new Set();
+        if (mat && this._coneMaterial && !this._coneVehicleMats.has(mat)) {
+            this._coneVehicleMats.add(mat);
+            this.world.addContactMaterial(new CANNON.ContactMaterial(this._coneMaterial, mat, { friction: 0, restitution: 0 }));
+        }
+        this._coneLevelManager = level_manager;
+    }
+
+    _onConeContact(cone, event) {
+        const lm = this._coneLevelManager;
+        if (!lm || lm.Ended() || !this._coneVehicles || !this._coneVehicles.has(event.body)) return;
+        // Um mesmo encostão gera vários eventos seguidos: conta no máximo um toque por cone a cada 1,5 s
+        const now = performance.now();
+        if (now - cone.lastTouchMs < CONE_TOUCH_COOLDOWN_MS) return;
+        cone.lastTouchMs = now;
+        if (typeof lm.coneTouched === 'function') lm.coneTouched();
+    }
+
+    /** Cones derrubados (inclinados além de 45°). */
+    anyConeKnockedOver() {
+        const up = new CANNON.Vec3();
+        return this.cones.some((cone) => {
+            cone.body.quaternion.vmult(CANNON_UP, up);
+            return up.y < CONE_KNOCKED_COS;
         });
     }
 
     SetUpCollisions(level_manager) {
-        this.cones.forEach((cone) => {
-            cone.body.addEventListener("collide", (event) => {
-                if (!level_manager.Ended()) {
-                    level_manager.failedLevel("You crashed into a cone.");
-                }
-            });
-        });
 
         this.walls.forEach((wall) => {
             wall.addEventListener("collide", (event) => {
@@ -246,6 +272,12 @@ export class Scenario {
     }
 
     Update(camera) {
+        // Cones soltos: a malha acompanha o corpo físico
+        for (const cone of this.cones) {
+            if (cone.body.sleepState === CANNON.Body.SLEEPING) continue;
+            cone.mesh.position.copy(cone.body.position);
+            cone.mesh.quaternion.copy(cone.body.quaternion);
+        }
         this._adaptResolution();
         this.renderer.render(this.scene, camera);
     }
@@ -315,6 +347,13 @@ const SPEED_BUMP_LIMITS = {
     posX: [-29, 29], posY: [-0.2, 1.0], posZ: [-34, 14],
     dimX: [0.3, 12], dimY: [0.01, 0.5], dimZ: [0.5, 40]
 };
+
+// Cones: massa (kg), intervalo mínimo entre dois toques contados e inclinação a partir da qual o cone conta como derrubado
+const CONE_MASS = 5;
+const CONE_GROUND_FRICTION = 0.08;
+const CONE_TOUCH_COOLDOWN_MS = 1500;
+const CONE_KNOCKED_COS = Math.cos(45 * Math.PI / 180);
+const CANNON_UP = new CANNON.Vec3(0, 1, 0);
 
 // Referências usadas pelo modo noturno (preenchidas durante a criação do cenário)
 const NIGHT = { lampMats: [], pools: [] };
@@ -822,6 +861,7 @@ function createGround(scene, world) {
     });
     groundBody.position.y = -0.1;
     world.addBody(groundBody);
+    return concreteMaterial;
 }
 
 /**

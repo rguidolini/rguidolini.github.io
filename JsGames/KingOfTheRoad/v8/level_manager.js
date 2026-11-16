@@ -12,6 +12,13 @@ const LEVEL3_CLOSEUP_VIEW = { theta: Math.PI, phi: 1.45, radius: 12.5 };
 // Fase que acontece à noite (em teste: Basic Trailer Skills; antes era a 5, Intermediate Trailer Skills)
 const NIGHT_LEVEL = 4;
 
+// Depois de uma batida que falha a fase, a cena continua rodando por 1 s (sem controle do jogador) antes de
+// congelar e mostrar a mensagem: dá para ver o cone cair ou a carreta balançar
+const FAIL_AFTERMATH_MS = 1000;
+
+// Penalidade por encostar num cone (derrubar um cone faz a fase falhar)
+const CONE_TOUCH_PENALTY_MS = 5000;
+
 // Seletor de fases (painel da tecla C): para não virar atalho, a fase N começa no minuto N × 10
 const LEVEL_SELECT_PENALTY_MS = 10 * 60 * 1000;
 
@@ -54,6 +61,7 @@ export class LevelManager {
             this.run.levelFails = 0;
         }
         this.gameEnded = false;
+        this._cancelFailAftermath();
         this.ui.msgBox.style.display = 'none';
         // No início da partida (fase 1), o cronômetro só começa quando o jogador liga o motor ou solta o freio de mão
         if (this.run && this.run.waitingForFirstAction) {
@@ -88,6 +96,7 @@ export class LevelManager {
             levelStartMs: 0,
             levelFails: 0,
             waitingForFirstAction: true,
+            coneTouches: 0,      // encostões em cones (+5 s cada)
             assisted: false,     // usou o seletor de fases
             penaltyMs: 0         // tempo somado pelo seletor de fases
         };
@@ -141,12 +150,29 @@ export class LevelManager {
             hitches: stats.hitches,
             lightsOn: stats.lightsOn || 0,
             nightHeadlights: Boolean(stats.nightHeadlights),
+            coneTouches: this.run.coneTouches || 0,
             assisted: Boolean(this.run.assisted),
             penaltyMs
         };
     }
 
+    /** Encostou num cone: +5 s no cronômetro, aviso na tela e som de alerta. */
+    coneTouched() {
+        if (this.gameEnded) return;
+        this.stopwatch.setElapsedMs(this.stopwatch.getElapsedMs() + CONE_TOUCH_PENALTY_MS);
+        if (this.run) this.run.coneTouches = (this.run.coneTouches || 0) + 1;
+        if (typeof this.onConePenalty === 'function') this.onConePenalty(CONE_TOUCH_PENALTY_MS);
+        if (this.truck && typeof this.truck.showWarning === 'function') {
+            this.truck.showWarning('⚠ You touched a cone: +5 s (knocking one over fails the level)', { group: 'cone-touch' });
+        }
+    }
+
     checkSuccess() {
+        if (!this.gameEnded && this.scenario && typeof this.scenario.anyConeKnockedOver === 'function'
+            && this.scenario.anyConeKnockedOver()) {
+            this.failedLevel("You knocked over a cone.");
+            return false;
+        }
         if (this.run && this.run.waitingForFirstAction && !this.gameEnded) {
             const engineOn = typeof this.truck.isEngineOn === 'function' && this.truck.isEngineOn();
             const brakeReleased = this.keyboardController && this.keyboardController.parkingBrakeOn === false;
@@ -422,15 +448,41 @@ export class LevelManager {
             this.run.crashes[kind]++;
         }
         this.gameEnded = true;
-        this.truck.freeze();
         if (this.truck && this.truck.engineSound) {
             this.truck.engineSound.playFailSound();
         }
         this.stopwatch.Pause();
+        // A mensagem aparece já na batida (junto com o som). A cena segue por FAIL_AFTERMATH_MS sem controle
+        // (motor sem força, sem pedais) e só depois congela
+        this.truck.currentThrottle = 0;
+        this.truck.currentBrake = 0;
+        for (let i = 0; i < this.truck.vehicle.wheelInfos.length; i++) this.truck.vehicle.applyEngineForce(0, i);
+        this.truck.controlsLocked = true;
+        if (this.keyboardController) this.keyboardController.locked = true;
+        this._failAftermathUntil = performance.now() + FAIL_AFTERMATH_MS;
+        this._failAftermathTimer = setTimeout(() => this._endFailAftermath(), FAIL_AFTERMATH_MS);
         this.ui.msgText.innerText = 'Level failed!\n' + reason;
         this.ui.msgBox.className = 'message-box fail';
         this.ui.msgBox.style.display = 'block';
         this.ui.actionButton.innerText = "Try again";
         this.ui.actionButton.onclick = () => this.setupLevel();
+    }
+
+    /** true durante o 1 s em que a cena continua rodando depois de uma batida. */
+    inFailAftermath() {
+        return Boolean(this._failAftermathTimer) && performance.now() < this._failAftermathUntil;
+    }
+
+    _cancelFailAftermath() {
+        if (this.truck) this.truck.controlsLocked = false;
+        if (this.keyboardController) this.keyboardController.locked = false;
+        if (this._failAftermathTimer) clearTimeout(this._failAftermathTimer);
+        this._failAftermathTimer = null;
+        this._failAftermathUntil = 0;
+    }
+
+    _endFailAftermath() {
+        this._cancelFailAftermath();
+        this.truck.freeze();
     }
 }

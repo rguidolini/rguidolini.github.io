@@ -119,11 +119,11 @@ export class KeyboardController {
     }
 
     switchParkingBreak() {
+        if (this.locked) return;   // travado no 1 s depois de uma batida
         this.parkingBrakeOn = !this.parkingBrakeOn;
     }
 
     lockParkingBreak() {
-        this.parkingBrakeOn = false;
-        this.switchParkingBreak();
+        this.parkingBrakeOn = true;
     }
 }

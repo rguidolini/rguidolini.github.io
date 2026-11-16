@@ -313,7 +313,7 @@ export class KenworthW900 {
     }
 
     toggleEngine() {
-        if (this.frozen) return this.engineOn;
+        if (this.frozen || this.controlsLocked) return this.engineOn;
         return this.setEngineOn(!this.engineOn);
     }
 
@@ -945,6 +945,7 @@ export class KenworthW900 {
     }
 
     EngageTrailer(trailer) {
+        if (this.controlsLocked) return;   // 1 s depois de uma batida: sem controle
         const moving = this.isMoving() !== 0 || Math.abs(this.GetSpeed()) > 0.08;
         if (moving) {
             const msg = this.parkingBrakeOn
